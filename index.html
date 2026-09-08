@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>多位數切切樂</title>
+  <!-- 發佈：把本檔存為 index.html，可直接放到 GitHub Pages 或 Vercel（無需 bundler） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Noto+Sans+TC:wght@700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --pink: #ff8fab; --pink-deep: #ef5f8a;
+      --mint: #7ce0c3; --mint-deep: #3cbc9a;
+      --lemon: #ffe066; --lemon-deep: #e4b82a;
+      --lilac: #cbb2fe; --lilac-deep: #9d7af0;
+      --sky: #8ecaff; --sky-deep: #4ea2f0;
+      --peach: #ffc09f;
+      --ink: #3b2a4a; --soft: #7a6588;
+      --digit: #ff8fab; --digit-shadow: #e45b86;
+      --safe-t: env(safe-area-inset-top, 0px);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-l: env(safe-area-inset-left, 0px);
+      --safe-r: env(safe-area-inset-right, 0px);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
+    body {
+      position: fixed; inset: 0;
+      font-family: "Noto Sans TC", "PingFang HK", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 12%, #ffd6e8 0 16%, transparent 17%),
+        radial-gradient(circle at 90% 10%, #c9f4e8 0 14%, transparent 15%),
+        radial-gradient(circle at 86% 88%, #ffe9b3 0 16%, transparent 17%),
+        linear-gradient(165deg, #fff3ea, #ffe8f2 50%, #eafbf6);
+      user-select: none;
+    }
+    button, input, textarea { font-family: inherit; }
+    button { cursor: pointer; }
+    input, textarea { user-select: text; -webkit-user-select: text; }
+
+    @keyframes popIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+    @keyframes bounce { 0% { transform: scale(1); } 35% { transform: scale(0.88); } 70% { transform: scale(1.08); } 100% { transform: scale(1); } }
+    @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 6px 0 var(--pink-deep), 0 0 0 0 rgba(255, 93, 143, 0.45); }
+      50% { box-shadow: 0 6px 0 var(--pink-deep), 0 0 0 14px rgba(255, 93, 143, 0); }
+    }
+    .bounce { animation: bounce 0.35s ease; }
+    .shake { animation: shake 0.4s ease; }
+
+    .app {
+      height: 100%; width: 100%; overflow: hidden; display: flex;
+      padding: calc(8px + var(--safe-t)) calc(12px + var(--safe-r)) calc(8px + var(--safe-b)) calc(12px + var(--safe-l));
+    }
+    .screen {
+      display: none; width: min(1080px, 100%); margin: 0 auto;
+      height: 100%; min-height: 0; flex-direction: column; overflow: hidden;
+      animation: popIn 0.35s ease;
+    }
+    .screen.active { display: flex; }
+    .card {
+      background: rgba(255,255,255,0.9); border: 3px solid #fff; border-radius: 28px;
+      box-shadow: 0 14px 32px rgba(255, 93, 143, 0.16); min-height: 0;
+    }
+    .candy {
+      border: 0; border-radius: 999px; font-weight: 900; padding: 10px 18px;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+    .candy:hover { filter: brightness(1.04); }
+    .candy:active { transform: translateY(4px) scale(0.96); box-shadow: 0 2px 0 rgba(0,0,0,0.12) !important; animation: bounce 0.3s ease; }
+    .pink { background: var(--pink); color: #fff; box-shadow: 0 6px 0 var(--pink-deep); }
+    .mint { background: var(--mint); color: #165f4c; box-shadow: 0 6px 0 var(--mint-deep); }
+    .lemon { background: var(--lemon); color: var(--ink); box-shadow: 0 6px 0 var(--lemon-deep); }
+    .lilac { background: var(--lilac); color: #fff; box-shadow: 0 6px 0 var(--lilac-deep); }
+    .sky { background: var(--sky); color: #123b63; box-shadow: 0 6px 0 var(--sky-deep); }
+    .peach { background: var(--peach); color: var(--ink); box-shadow: 0 6px 0 #f09468; }
+    .ghost { background: #fff; color: var(--soft); box-shadow: 0 5px 0 #ecd6de; }
+
+    #screen-login { align-items: center; justify-content: center; }
+    .login { width: min(400px, 100%); padding: 22px 22px 16px; text-align: center; }
+    .mascot {
+      width: 72px; height: 72px; margin: 0 auto 6px; border-radius: 50%;
+      display: grid; place-items: center; font-size: 36px; background: #fff;
+      box-shadow: 0 8px 0 #ffc2d6; animation: floaty 2.8s ease-in-out infinite;
+    }
+    .title {
+      font-family: "Fredoka", "Noto Sans TC", sans-serif;
+      font-size: clamp(28px, 6vh, 42px); font-weight: 900; letter-spacing: 0.04em;
+      margin-bottom: 14px; line-height: 1.15;
+    }
+    .title span:nth-child(odd) { color: var(--pink-deep); }
+    .title span:nth-child(even) { color: #7b4bff; }
+    .field { text-align: left; margin-bottom: 10px; }
+    .field label { display: block; font-weight: 900; font-size: 15px; margin-bottom: 4px; }
+    .field input {
+      width: 100%; border: 3px solid #ffe1ec; border-radius: 16px;
+      padding: 10px 12px; font-size: 18px; font-weight: 800; outline: none; background: #fff;
+    }
+    .field input:focus { border-color: var(--pink); }
+    .start { width: 100%; font-size: 22px; padding: 12px; margin: 6px 0 10px; }
+    .teacher-btn {
+      width: 64px; height: 64px; border-radius: 50%; font-size: 13px; line-height: 1.15;
+      padding: 0; margin: 4px auto 0; display: grid; place-items: center;
+    }
+
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; margin-bottom: 8px; }
+    .pill {
+      background: #fff; border-radius: 999px; padding: 6px 12px;
+      font-weight: 800; font-size: 14px; box-shadow: 0 4px 0 #f0d7e2; white-space: nowrap;
+    }
+    .timer { font-variant-numeric: tabular-nums; background: #fff8d9; min-width: 92px; text-align: center; }
+    .timer.low { background: #ffd0d8; color: #b42318; }
+    .tiny { padding: 6px 12px; font-size: 13px; }
+
+    .play { flex: 1; min-height: 0; overflow: hidden; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .task-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-shrink: 0; }
+    .task-h h2 { font-size: clamp(18px, 2.6vh, 24px); }
+    .task-h p { font-size: 14px; font-weight: 900; color: var(--soft); }
+
+    .board {
+      flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(180deg, #fff, #fff8fb); border-radius: 22px; overflow: hidden;
+    }
+    .number-row { display: flex; align-items: center; transform-origin: center center; }
+    .digit {
+      width: 68px; height: 80px; border-radius: 20px; display: grid; place-items: center;
+      font-size: 40px; font-weight: 900; color: #fff; background: var(--digit);
+      box-shadow: 0 6px 0 var(--digit-shadow); flex-shrink: 0;
+    }
+    .gap { width: 36px; height: 80px; border: 0; background: transparent; display: grid; place-items: center; flex-shrink: 0; }
+    .gap::before { content: ""; width: 5px; height: 52px; border-radius: 99px; border: 2.5px dashed #f3c6d6; }
+    .gap:hover::before, .gap:focus-visible::before { background: #ffd6e5; border-style: solid; border-color: var(--pink-deep); }
+    .gap.cut { pointer-events: none; }
+    .gap.cut::before { display: none; }
+    .flag { min-width: 38px; padding: 7px 6px; border-radius: 14px; font-weight: 900; font-size: 16px; background: var(--lemon); box-shadow: 0 4px 0 var(--lemon-deep); }
+    .flag.yi { background: var(--lilac); color: #fff; box-shadow: 0 4px 0 var(--lilac-deep); }
+
+    .toast {
+      display: none; flex-shrink: 0; background: #fff1f1; border: 2px solid #ffb4b4;
+      color: #b42318; border-radius: 16px; padding: 8px 12px; font-weight: 900; font-size: 16px; text-align: center;
+    }
+    .toast.show { display: block; }
+    .okbar { display: none; flex-shrink: 0; text-align: center; }
+    .okbar.show { display: block; }
+    .okbar .candy { font-size: 18px; padding: 10px 22px; }
+
+    .segs { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+    .seg {
+      background: #fff; border-radius: 14px; padding: 6px 10px;
+      font-size: clamp(16px, 2.8vh, 24px); font-weight: 900; letter-spacing: 0.06em; box-shadow: 0 4px 0 #f0d7e2;
+    }
+    .seg b { color: var(--pink-deep); margin: 0 3px; font-size: 0.72em; }
+
+    .dictation { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+    .answer-label { font-size: 13px; font-weight: 900; color: var(--soft); text-align: center; }
+    .answer-input {
+      width: 100%; min-height: 56px; max-height: 72px; resize: none;
+      border: 3px solid #ffd9a8; border-radius: 18px; padding: 8px 12px;
+      font-size: clamp(20px, 3.2vh, 28px); font-weight: 900; text-align: center;
+      letter-spacing: 0.06em; line-height: 1.35; background: #fffdf7; color: var(--ink);
+      outline: none; overflow: auto; user-select: text; -webkit-user-select: text;
+    }
+    .answer-input:focus { border-color: var(--pink); box-shadow: 0 0 0 4px rgba(255, 141, 171, 0.25); }
+    .answer-input.live { border-color: var(--pink-deep); background: #fff5f8; }
+    .answer-input::placeholder { color: #d2b8c4; font-weight: 800; letter-spacing: 0; font-size: 16px; }
+
+    .speak-row { display: flex; align-items: center; justify-content: center; gap: 10px; flex-shrink: 0; }
+    .langs { display: flex; gap: 6px; }
+    .langs button {
+      border: 0; border-radius: 999px; padding: 4px 10px; font-weight: 900; font-size: 13px;
+      background: #fff; color: var(--soft); box-shadow: 0 3px 0 #ecd6de;
+    }
+    .langs button.on { background: var(--lemon); color: var(--ink); box-shadow: 0 3px 0 var(--lemon-deep); }
+    .mic {
+      min-width: 148px; height: 52px; border-radius: 999px; border: 0;
+      background: var(--pink); color: #fff; font-size: 15px; font-weight: 900; padding: 0 16px;
+      box-shadow: 0 6px 0 var(--pink-deep); touch-action: manipulation;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+    }
+    .mic.listen { animation: pulse 1.1s ease infinite; background: #ff5d8f; }
+    .mic:disabled { pointer-events: auto; opacity: 1; cursor: pointer; filter: none; }
+
+    .pad { flex-shrink: 0; }
+    .keys { display: flex; flex-wrap: nowrap; gap: 6px; justify-content: center; margin-bottom: 6px; }
+    .key { min-width: 42px; height: 40px; border-radius: 14px; font-size: 17px; font-weight: 900; padding: 0 8px; flex: 0 0 auto; }
+    .acts { display: flex; gap: 8px; }
+    .acts .candy { flex: 1; padding: 8px; font-size: 16px; }
+
+    .report {
+      position: fixed; inset: 0; background: rgba(59, 42, 74, 0.45);
+      display: none; place-items: center; z-index: 25; padding: 16px;
+    }
+    .report.show { display: grid; }
+    .report-card {
+      width: min(520px, 100%); background: #fff; border-radius: 32px;
+      padding: 22px 20px 18px; text-align: center; border: 4px solid #fff;
+      box-shadow: 0 18px 40px rgba(255, 93, 143, 0.28); animation: popIn 0.4s ease;
+    }
+    .report-card h2 { font-size: clamp(22px, 3.4vh, 28px); margin: 8px 0 10px; }
+    .report-card p { font-weight: 800; line-height: 1.55; margin: 8px 0; font-size: 16px; }
+    .tip {
+      background: #fff8d9; border-radius: 18px; padding: 12px 14px; margin: 12px 0 16px;
+      font-weight: 800; line-height: 1.6; text-align: left;
+    }
+
+    .dash-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-shrink: 0; margin-bottom: 8px; }
+    .dash-h h1 { font-family: "Fredoka", "Noto Sans TC", sans-serif; font-size: clamp(20px, 3vh, 28px); }
+    .dash-h .acts { margin: 0; }
+    .dash { flex: 1; min-height: 0; overflow: hidden; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex-shrink: 0; }
+    .stat { border-radius: 16px; padding: 10px; }
+    .stat b { display: block; font-size: 12px; opacity: 0.8; }
+    .stat strong { font-size: clamp(16px, 2.6vh, 24px); display: block; line-height: 1.2; }
+    .s1 { background: #ffe1ea; } .s2 { background: #d9f8ee; } .s3 { background: #fff1c7; }
+    .tools { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .tools select { border: 2px solid #ffe1ec; border-radius: 12px; padding: 4px 8px; font-weight: 800; background: #fff; }
+    .records { flex: 1; min-height: 0; overflow: auto; }
+    .student-block { margin-bottom: 8px; }
+    .student-block h3 { background: #f6f0ff; border-radius: 10px; padding: 6px 10px; font-size: 13px; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(59,42,74,0.08); font-size: 12px; }
+    th { background: #fff3f8; }
+    .empty { text-align: center; padding: 20px; font-weight: 800; color: var(--soft); }
+
+    .modal { position: fixed; inset: 0; background: rgba(59,42,74,0.4); display: none; place-items: center; z-index: 20; padding: 16px; }
+    .modal.show { display: grid; }
+    .modal-card { width: min(360px, 100%); background: #fff; border-radius: 24px; padding: 18px; text-align: center; }
+    .modal-card input {
+      width: 100%; border: 3px solid #ffe1ec; border-radius: 14px;
+      padding: 10px; font-size: 20px; font-weight: 800; text-align: center; margin: 10px 0;
+    }
+    canvas#confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 40; }
+
+    @media (max-height: 720px) {
+      .digit { width: 54px; height: 64px; font-size: 32px; border-radius: 16px; }
+      .gap { width: 28px; height: 64px; }
+      .key { min-width: 36px; height: 34px; font-size: 15px; }
+      .mascot { width: 56px; height: 56px; font-size: 28px; }
+      .answer-input { min-height: 46px; max-height: 58px; font-size: 20px; }
+      .mic { height: 46px; min-width: 132px; font-size: 14px; }
+    }
+    @media (max-width: 700px) {
+      .digit { width: 44px; height: 54px; font-size: 26px; }
+      .gap { width: 22px; height: 54px; }
+      .keys { flex-wrap: wrap; }
+    }
+    @media print {
+      html, body, .app, .screen.active { position: static; height: auto; overflow: visible; }
+      .no-print, canvas, .report, .modal { display: none !important; }
+      .records { overflow: visible; }
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="confetti"></canvas>
+  <div class="app">
+    <section id="screen-login" class="screen active">
+      <div class="card login">
+        <div class="mascot">✂️</div>
+        <h1 class="title" id="titleWave"></h1>
+        <div class="field">
+          <label for="classId">班別</label>
+          <input id="classId" maxlength="8" placeholder="5A" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="studentId">學號</label>
+          <input id="studentId" maxlength="6" placeholder="01" inputmode="numeric" autocomplete="off" />
+        </div>
+        <button class="candy pink start" id="startBtn">開始任務</button>
+        <button class="candy lilac teacher-btn" id="teacherBtn">老師<br>後台</button>
+      </div>
+    </section>
+
+    <section id="screen-game" class="screen">
+      <div class="topbar">
+        <div class="pill" id="playerPill">5A 01</div>
+        <div class="pill" id="qPill">第 1 題</div>
+        <div class="pill timer" id="timer">⏱️ 03:00</div>
+        <button class="candy ghost tiny no-print" id="backLoginBtn">換人</button>
+      </div>
+      <div class="card play">
+        <div id="taskCut" style="flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;">
+          <div class="task-h">
+            <h2>任務一：四位切一刀</h2>
+            <p>由右起數 4 位</p>
+          </div>
+          <div class="board" id="numberBoard"></div>
+          <div class="toast" id="cutToast"></div>
+          <div class="okbar" id="cutSuccess">
+            <button class="candy mint" id="toReadBtn">確認</button>
+          </div>
+        </div>
+
+        <div id="taskRead" style="flex:1;min-height:0;display:none;flex-direction:column;gap:6px;">
+          <div class="task-h">
+            <h2>任務二：看線讀數</h2>
+            <p>🎤 語音輸入　·　按鍵拼字</p>
+          </div>
+          <div class="segs" id="segmentPreview"></div>
+          <div class="dictation" id="dictationArea">
+            <div class="answer-label">中國數字答案框</div>
+            <textarea id="answerBox" class="answer-input" rows="2" maxlength="80" placeholder="🎤 語音輸入　或　按鍵拼字" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+            <div class="speak-row">
+              <div class="langs">
+                <button id="langHK" class="on" type="button">粵</button>
+                <button id="langCN" type="button">普</button>
+              </div>
+              <button class="mic" id="micBtn" type="button">🎤 語音輸入</button>
+            </div>
+          </div>
+          <div class="pad" id="keyPad">
+            <div class="keys" id="digitKeys"></div>
+            <div class="keys" id="placeKeys"></div>
+            <div class="acts">
+              <button class="candy mint" id="submitReadBtn">確認</button>
+            </div>
+          </div>
+          <div class="toast" id="readToast"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-dash" class="screen">
+      <div class="dash-h">
+        <h1>老師後台</h1>
+        <div class="acts no-print">
+          <button class="candy lemon tiny" id="printBtn">列印</button>
+          <button class="candy peach tiny" id="clearDataBtn">清空</button>
+          <button class="candy ghost tiny" id="dashBackBtn">返回</button>
+        </div>
+      </div>
+      <div class="card dash">
+        <div class="stats" id="analysisCards"></div>
+        <div class="tools">
+          <strong>學生紀錄</strong>
+          <select id="classFilter"></select>
+        </div>
+        <div class="records" id="studentRecords"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="report" id="reportModal">
+    <div class="report-card">
+      <div class="mascot">🏆</div>
+      <h2>成績診斷卡</h2>
+      <p id="reportScore"></p>
+      <div class="tip" id="reportTip"></div>
+      <button class="candy pink" id="reportBackBtn">完成</button>
+    </div>
+  </div>
+
+  <div class="modal" id="pinModal">
+    <div class="modal-card">
+      <h3>老師後台</h3>
+      <input id="pinInput" type="password" maxlength="8" inputmode="numeric" autocomplete="off" />
+      <div class="acts">
+        <button class="candy ghost" id="pinCancel">取消</button>
+        <button class="candy lilac" id="pinOk">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!--
+    Google Apps Script（試算表 → 擴充功能 → Apps Script）貼上後「部署 → 新增部署作業 → 網頁應用程式」：
+    執行身分：我自己；存取權：任何人。把 Web App URL 貼到下方 GOOGLE_SHEET_URL。
+
+    function doPost(e) {
+      var sh = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+      if (sh.getLastRow() === 0) sh.appendRow(["時間","學生","答對題數","平均用時","診斷"]);
+      var data = {};
+      try { data = JSON.parse(e.postData.contents); } catch (err) {}
+      sh.appendRow([new Date(), data.student || "", data.score || 0, data.avgTime || "", data.diagnostic || ""]);
+      return ContentService.createTextOutput("ok");
+    }
+  -->
+  <script>
+    (function () {
+      // ============================================================
+      // 設定：請把 YOUR_SCRIPT_ID 換成你的 Google Apps Script Web App URL
+      // 然後把本檔存成 index.html，即可免費發佈到 GitHub Pages / Vercel
+      // ============================================================
+      const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec"; // 請替換為你的 Google Web App URL
+
+      const HAN = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+      const DIGIT_KEYS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "零"];
+      const PLACE_KEYS = ["億", "萬", "千", "百", "十"];
+      const STORE_KEY = "cutcut-math-p5-v5";
+      const TEACHER_PIN = "2246";
+      const GAME_SECS = 180;
+      const SPEECH_FAIL = "🎤 改用按鍵拼字";
+      const TIP_CUT = "💡 小提醒：記得劃線要『由右邊個位起』向左數足 4 個數字才切一刀喔！";
+      const TIP_ZERO = "💡 小提醒：注意連續零的讀法，記得補『零』字喔！";
+      const TIP_PERFECT = "🌟 太厲害了！你完全掌握了四位分節法，零失誤過關！";
+      const SpeechRec =
+        window.SpeechRecognition ||
+        window.webkitSpeechRecognition ||
+        window.mozSpeechRecognition ||
+        window.msSpeechRecognition ||
+        null;
+
+      const state = {
+        classId: "", studentId: "",
+        qIndex: 1, digits: "", readings: [],
+        cuts: new Set(),
+        lang: "zh-HK",
+        listening: false, composing: false, userEdited: false,
+        remain: GAME_SECS,
+        ended: false,
+        done: 0,
+        qTimes: [],
+        cutErrors: 0,
+        readZeroErrors: 0,
+        readOtherErrors: 0,
+        qStart: 0,
+        sheetSent: false
+      };
+
+      let rec = null, sessionFinal = "", recoverTimer = null, audioCtx = null, countId = null;
+
+      const $ = (id) => document.getElementById(id);
+      const screens = { login: $("screen-login"), game: $("screen-game"), dash: $("screen-dash") };
+
+      function showScreen(name) {
+        Object.keys(screens).forEach((key) => screens[key].classList.toggle("active", key === name));
+        stopListen(true);
+        if (name !== "game") stopCountdown();
+      }
+      function bounce(el) {
+        if (!el) return;
+        el.classList.remove("bounce");
+        void el.offsetWidth;
+        el.classList.add("bounce");
+      }
+      $("titleWave").innerHTML = [..."多位數切切樂"].map((ch, i) =>
+        `<span style="display:inline-block;animation:floaty 2.4s ${i * 0.08}s ease-in-out infinite">${ch}</span>`
+      ).join("");
+
+      function loadStore() {
+        try {
+          const raw = localStorage.getItem(STORE_KEY);
+          if (!raw) return { students: {}, logs: [] };
+          const data = JSON.parse(raw);
+          return { students: data.students || {}, logs: Array.isArray(data.logs) ? data.logs : [] };
+        } catch (e) { return { students: {}, logs: [] }; }
+      }
+      function saveStore(data) { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+      function normalizeId(id) {
+        const raw = String(id || "").trim();
+        return /^\d+$/.test(raw) ? raw.padStart(2, "0") : raw;
+      }
+      function studentKey(c, s) { return `${c}__${normalizeId(s)}`; }
+      function nowText() {
+        const d = new Date();
+        const p = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+      }
+      function ensureStudent() {
+        const db = loadStore();
+        const key = studentKey(state.classId, state.studentId);
+        if (!db.students[key]) {
+          db.students[key] = { classId: state.classId, studentId: normalizeId(state.studentId) };
+          saveStore(db);
+        }
+        return key;
+      }
+
+      function diagnose() {
+        const cut = state.cutErrors;
+        const zero = state.readZeroErrors;
+        const other = state.readOtherErrors;
+        if (cut + zero + other === 0) {
+          return { short: "零失誤", sheet: "完全掌握四位分節法，零失誤過關", tip: TIP_PERFECT };
+        }
+        if (cut >= zero && cut >= other) {
+          return { short: "劃線：未由右起數足4位", sheet: "劃線建議由右起數足4位", tip: TIP_CUT };
+        }
+        return { short: "讀數漏點零", sheet: "讀數漏點零", tip: TIP_ZERO };
+      }
+
+      function sheetConfigured() {
+        return /^https:\/\/script\.google\.com\/macros\/s\/(?!YOUR_SCRIPT_ID\b)[^/]+\/exec\/?$/.test(GOOGLE_SHEET_URL);
+      }
+      function sendToGoogleSheet(d) {
+        if (state.sheetSent || !sheetConfigured()) return;
+        state.sheetSent = true;
+        const avg = state.done ? Math.round(state.qTimes.reduce((a, b) => a + b, 0) / state.done) : 0;
+        const payload = {
+          student: `${state.classId} (${normalizeId(state.studentId)})`,
+          score: state.done,
+          avgTime: `${avg}秒`,
+          diagnostic: d.sheet
+        };
+        try {
+          fetch(GOOGLE_SHEET_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+          }).catch(function () {});
+        } catch (err) {}
+      }
+
+      function saveSession() {
+        const db = loadStore();
+        ensureStudent();
+        const avg = state.done ? Math.round(state.qTimes.reduce((a, b) => a + b, 0) / state.done) : 0;
+        const d = diagnose();
+        db.logs.push({
+          classId: state.classId,
+          studentId: normalizeId(state.studentId),
+          done: state.done,
+          avgSec: avg,
+          diagnosis: d.short,
+          cutErrors: state.cutErrors,
+          readErrors: state.readZeroErrors + state.readOtherErrors,
+          time: nowText()
+        });
+        saveStore(db);
+        return d;
+      }
+
+      function readSection(n, afterZero) {
+        n = Number(n) || 0;
+        if (!n) return "";
+        const d0 = Math.floor(n / 1000);
+        const d1 = Math.floor(n / 100) % 10;
+        const d2 = Math.floor(n / 10) % 10;
+        const d3 = n % 10;
+        let s = "";
+        if (d0) s += HAN[d0] + "千";
+        if (d1) s += HAN[d1] + "百";
+        else if (s && (d2 || d3)) s += "零";
+        if (d2) {
+          if (d2 === 1 && !d0 && !d1) s += (afterZero || s.endsWith("零")) ? "一十" : "十";
+          else s += HAN[d2] + "十";
+        } else if (s && d3 && !s.endsWith("零")) s += "零";
+        if (d3) s += HAN[d3];
+        return s;
+      }
+      function toChinese(digitStr) {
+        const s = String(digitStr || "").replace(/^0+/, "") || "0";
+        const groups = [];
+        let rest = s;
+        while (rest.length) {
+          groups.unshift(rest.slice(-4));
+          rest = rest.slice(0, -4);
+        }
+        const units = ["", "萬", "億", "兆"];
+        let out = "";
+        let pendingZero = false;
+        for (let i = 0; i < groups.length; i++) {
+          const g = groups[i];
+          const val = parseInt(g, 10);
+          const unit = units[groups.length - 1 - i] || "";
+          if (!val) { if (out) pendingZero = true; continue; }
+          const leadZero = i > 0 && g.padStart(4, "0")[0] === "0";
+          const afterZero = !!(out && (pendingZero || leadZero));
+          if (afterZero && !out.endsWith("零")) out += "零";
+          pendingZero = false;
+          out += readSection(val, afterZero) + unit;
+        }
+        return out || "零";
+      }
+      function readingsFor(digits) {
+        const a = toChinese(digits);
+        return [...new Set([a, a.replace(/零十/g, "零一十"), a.replace(/零一十/g, "零十")])];
+      }
+      function arabicNumberToChinese(digitStr) {
+        const s = String(digitStr || "");
+        if (!s) return "";
+        if (s.length === 1) return HAN[Number(s)] || "零";
+        return toChinese(s);
+      }
+      function normalizeReading(s) {
+        const map = {
+          "两": "二", "兩": "二", "贰": "二", "貳": "二", "幺": "一",
+          "万": "萬", "亿": "億",
+          "壹": "一", "叁": "三", "參": "三", "肆": "四", "伍": "五",
+          "陸": "六", "柒": "七", "捌": "八", "玖": "九", "拾": "十", "佰": "百", "仟": "千"
+        };
+        let t = String(s || "")
+          .replace(/\s+/g, "")
+          .replace(/[，。,.!！?？、'"“”]/g, "")
+          .replace(/[０-９]/g, (ch) => String(ch.charCodeAt(0) - 65296));
+        t = t.replace(/[0-9]+/g, (run) => arabicNumberToChinese(run));
+        t = t.replace(/[两兩万亿幺壹貳贰叁參肆伍陸柒捌玖拾佰仟]/g, (ch) => map[ch] || ch);
+        t = t.replace(/^(我覺得|答案是|答案係|即係|等於|是|係)/, "");
+        t = t.replace(/(呀|喇|啦|喎|喔|哦)$/, "");
+        return t;
+      }
+
+      function genNumber() {
+        const len = Math.random() < 0.45 ? 8 : 9;
+        const a = Array(len).fill(0);
+        a[0] = 1 + Math.floor(Math.random() * 9);
+        const mode = Math.random();
+        if (mode < 0.4) {
+          for (let i = 1; i < len; i++) a[i] = 1 + Math.floor(Math.random() * 9);
+          const zlen = 2 + Math.floor(Math.random() * Math.min(5, len - 2));
+          const start = 1 + Math.floor(Math.random() * (len - zlen));
+          for (let i = 0; i < zlen; i++) a[start + i] = 0;
+        } else if (mode < 0.75) {
+          for (let i = 1; i < len; i++) a[i] = Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 9);
+        } else {
+          for (let i = 1; i < len; i++) a[i] = Math.floor(Math.random() * 10);
+          const p = 1 + Math.floor(Math.random() * (len - 2));
+          a[p] = 0; a[p + 1] = 0;
+        }
+        if (a[0] === 0) a[0] = 1 + Math.floor(Math.random() * 9);
+        const s = a.join("");
+        return s === state.digits ? genNumber() : s;
+      }
+
+      function requiredCuts(digits) {
+        const n = digits.length;
+        const cuts = [];
+        if (n >= 5) cuts.push({ index: n - 5, label: "萬" });
+        if (n >= 9) cuts.push({ index: n - 9, label: "億" });
+        return cuts;
+      }
+      function cutsComplete(digits) {
+        return requiredCuts(digits).every((c) => state.cuts.has(c.index));
+      }
+
+      function unlockAudio() {
+        if (!audioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (AC) audioCtx = new AC();
+        }
+        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      }
+      function tone(freq, dur, type, gain) {
+        if (!audioCtx) return;
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = type || "sine";
+        o.frequency.value = freq;
+        g.gain.value = gain || 0.05;
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start();
+        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+        o.stop(audioCtx.currentTime + dur);
+      }
+      function sfx(kind) {
+        unlockAudio();
+        if (kind === "ok") {
+          tone(523, 0.1, "triangle");
+          setTimeout(() => tone(659, 0.1, "triangle"), 80);
+          setTimeout(() => tone(784, 0.16, "triangle"), 160);
+        } else if (kind === "cut") tone(880, 0.07, "square", 0.03);
+        else if (kind === "bad") tone(180, 0.2, "sawtooth", 0.04);
+        else if (kind === "win") [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => tone(f, 0.14, "triangle"), i * 100));
+      }
+
+      function renderTimer() {
+        const s = Math.max(0, state.remain);
+        $("timer").textContent = `⏱️ ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+        $("timer").classList.toggle("low", s <= 15);
+      }
+      function stopCountdown() {
+        clearInterval(countId);
+        countId = null;
+      }
+      function startCountdown() {
+        stopCountdown();
+        state.remain = GAME_SECS;
+        state.ended = false;
+        renderTimer();
+        countId = setInterval(() => {
+          if (state.ended) return;
+          state.remain -= 1;
+          renderTimer();
+          if (state.remain <= 0) endSession();
+        }, 1000);
+      }
+
+      function endSession() {
+        if (state.ended) return;
+        state.ended = true;
+        state.remain = 0;
+        renderTimer();
+        stopCountdown();
+        stopListen(true);
+        const d = saveSession();
+        sendToGoogleSheet(d);
+        $("reportScore").textContent = `🎉 太棒了！你一共挑戰成功了 ${state.done} 道題目！`;
+        $("reportTip").textContent = d.tip;
+        $("reportModal").classList.add("show");
+        burstConfetti(180);
+        sfx("win");
+      }
+
+      function fitRow() {
+        const board = $("numberBoard");
+        const row = board && board.querySelector(".number-row");
+        if (!row) return;
+        row.style.transform = "scale(1)";
+        const sw = row.scrollWidth, sh = row.scrollHeight;
+        const bw = board.clientWidth - 12, bh = board.clientHeight - 12;
+        if (!sw || !sh || !bw || !bh) return;
+        row.style.transform = `scale(${Math.min(1, bw / sw, bh / sh)})`;
+      }
+
+      function renderCutBoard() {
+        const digits = state.digits;
+        const n = digits.length;
+        const need = requiredCuts(digits);
+        const cutsMap = Object.fromEntries(need.map((c) => [c.index, c.label]));
+        const allDone = cutsComplete(digits);
+        const parts = [];
+        for (let i = 0; i < n; i++) {
+          parts.push(`<div class="digit">${digits[i]}</div>`);
+          if (i < n - 1) {
+            const label = cutsMap[i];
+            if (state.cuts.has(i) && label) {
+              parts.push(`<button class="gap cut"><span class="flag ${label === "億" ? "yi" : ""}">${label}</span></button>`);
+            } else if (allDone) {
+              parts.push(`<span class="gap cut"></span>`);
+            } else {
+              parts.push(`<button class="gap" data-gap="${i}"></button>`);
+            }
+          }
+        }
+        $("numberBoard").innerHTML = `<div class="number-row">${parts.join("")}</div>`;
+        $("numberBoard").querySelectorAll(".gap[data-gap]").forEach((btn) => {
+          btn.addEventListener("click", () => onCut(Number(btn.dataset.gap)));
+        });
+        requestAnimationFrame(fitRow);
+        setTimeout(fitRow, 60);
+      }
+
+      function classifyCutError(gapIndex, digits) {
+        const n = digits.length;
+        const cuts = requiredCuts(digits);
+        const wan = cuts.find((c) => c.label === "萬");
+        const yi = cuts.find((c) => c.label === "億");
+        if (wan && gapIndex > wan.index) return "未由右起數足4位";
+        if (n >= 9 && gapIndex === 3) return "從左邊隨意劃線";
+        if (yi && wan && state.cuts.has(wan.index) && !state.cuts.has(yi.index)) return "漏劃億字線";
+        if (wan && gapIndex < wan.index) return "從左邊隨意劃線";
+        return "劃線位置不正確";
+      }
+      function showToast(id, text) {
+        const el = $(id);
+        el.textContent = text;
+        el.classList.add("show", "shake");
+        setTimeout(() => el.classList.remove("shake"), 400);
+      }
+      function onCut(gapIndex) {
+        if (state.ended || cutsComplete(state.digits)) return;
+        const hit = requiredCuts(state.digits).find((c) => c.index === gapIndex);
+        bounce($("numberBoard"));
+        if (!hit) {
+          sfx("bad");
+          state.cutErrors += 1;
+          showToast("cutToast", "由右起數 4 位");
+          return;
+        }
+        sfx("cut");
+        state.cuts.add(gapIndex);
+        $("cutToast").classList.remove("show");
+        renderCutBoard();
+        if (cutsComplete(state.digits)) {
+          sfx("ok");
+          burstConfetti(70);
+          $("cutSuccess").classList.add("show");
+        }
+      }
+
+      function segmentedPreview(digits) {
+        const cuts = requiredCuts(digits).sort((a, b) => a.index - b.index);
+        let html = "", start = 0;
+        cuts.forEach((cut) => {
+          html += `<div class="seg">${digits.slice(start, cut.index + 1)}<b>${cut.label}</b></div>`;
+          start = cut.index + 1;
+        });
+        html += `<div class="seg">${digits.slice(start)}</div>`;
+        return html;
+      }
+
+      function enterRead() {
+        if (state.ended) return;
+        stopListen(true);
+        $("taskCut").style.display = "none";
+        $("taskRead").style.display = "flex";
+        $("cutSuccess").classList.remove("show");
+        sessionFinal = "";
+        state.userEdited = false;
+        $("segmentPreview").innerHTML = segmentedPreview(state.digits);
+        $("readToast").classList.remove("show");
+        setAnswer("");
+        recoverMic();
+        if (!SpeechRec) showToast("readToast", SPEECH_FAIL);
+        focusAnswer();
+      }
+
+      function renderKeys() {
+        $("digitKeys").innerHTML = DIGIT_KEYS.map((k) =>
+          `<button class="candy pink key" data-token="${k}">${k}</button>`
+        ).join("");
+        const colors = ["lilac", "lemon", "sky", "mint", "peach"];
+        $("placeKeys").innerHTML =
+          PLACE_KEYS.map((k, i) => `<button class="candy ${colors[i]} key" data-token="${k}">${k}</button>`).join("") +
+          `<button class="candy ghost key" id="backspaceBtn" type="button">退格</button>` +
+          `<button class="candy peach key" id="clearBtn" type="button">清除</button>`;
+        document.querySelectorAll("#digitKeys [data-token], #placeKeys [data-token]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            bounce(btn);
+            state.userEdited = true;
+            insertAnswer(btn.dataset.token);
+            sfx("cut");
+          });
+        });
+        $("backspaceBtn").addEventListener("click", () => {
+          bounce($("backspaceBtn"));
+          state.userEdited = true;
+          deleteAnswer();
+        });
+        $("clearBtn").addEventListener("click", () => {
+          bounce($("clearBtn"));
+          state.userEdited = true;
+          sessionFinal = "";
+          setAnswer("");
+          focusAnswer();
+        });
+      }
+
+      function answerEl() { return $("answerBox"); }
+      function focusAnswer() {
+        const el = answerEl();
+        el.focus();
+        const n = el.value.length;
+        try { el.setSelectionRange(n, n); } catch (e) {}
+      }
+      function setAnswer(text, live) {
+        const el = answerEl();
+        el.value = text;
+        el.classList.toggle("live", !!live);
+      }
+      function getAnswerRaw() { return answerEl().value || ""; }
+      function insertAnswer(token) {
+        const el = answerEl();
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? el.value.length;
+        el.value = el.value.slice(0, start) + token + el.value.slice(end);
+        const pos = start + token.length;
+        el.focus();
+        try { el.setSelectionRange(pos, pos); } catch (e) {}
+      }
+      function deleteAnswer() {
+        const el = answerEl();
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? el.value.length;
+        if (start !== end) {
+          el.value = el.value.slice(0, start) + el.value.slice(end);
+          try { el.setSelectionRange(start, start); } catch (e) {}
+        } else if (start > 0) {
+          el.value = el.value.slice(0, start - 1) + el.value.slice(end);
+          try { el.setSelectionRange(start - 1, start - 1); } catch (e) {}
+        }
+        el.focus();
+      }
+
+      function classifyReadError(got, expected) {
+        const zerosExp = (expected.match(/零/g) || []).length;
+        const zerosGot = (got.match(/零/g) || []).length;
+        const stripped = (s) => s.replace(/零/g, "");
+        if (zerosGot < zerosExp || (stripped(got) === stripped(expected) && got !== expected)) return "讀數漏點零";
+        const places = ["億", "萬", "千", "百", "十"];
+        const pick = (s) => [...s].filter((ch) => places.includes(ch)).join("");
+        if (pick(got) !== pick(expected)) return "讀數位值拼湊錯誤";
+        return "讀數數字拼湊錯誤";
+      }
+
+      function passRead() {
+        if (state.ended) return;
+        stopListen(true);
+        const sec = Math.max(1, Math.round((Date.now() - state.qStart) / 1000));
+        state.qTimes.push(sec);
+        state.done += 1;
+        sfx("ok");
+        $("readToast").classList.remove("show");
+        burstConfetti(90);
+        if (state.remain <= 0) { endSession(); return; }
+        setTimeout(() => {
+          if (state.ended) return;
+          state.qIndex += 1;
+          newQuestion();
+        }, 450);
+      }
+      function failRead(got) {
+        sfx("bad");
+        const kind = classifyReadError(got, state.readings[0]);
+        if (kind === "讀數漏點零") state.readZeroErrors += 1;
+        else state.readOtherErrors += 1;
+        showToast("readToast", "留意 零／位值");
+        focusAnswer();
+      }
+      function submitRead() {
+        if (state.ended) return;
+        const got = normalizeReading(getAnswerRaw());
+        bounce(answerEl());
+        if (!got) { showToast("readToast", "🎤 語音輸入　或　按鍵拼字"); sfx("bad"); focusAnswer(); return; }
+        setAnswer(got);
+        if (state.readings.includes(got)) passRead();
+        else failRead(got);
+      }
+
+      function unlockMicNow() {
+        const btn = $("micBtn");
+        if (!btn) return;
+        btn.disabled = false;
+        btn.removeAttribute("disabled");
+        btn.classList.remove("off", "listen");
+        btn.style.pointerEvents = "auto";
+        btn.style.opacity = "1";
+        btn.style.filter = "none";
+        btn.textContent = "🎤 語音輸入";
+        state.listening = false;
+      }
+      function resetSpeechMemory() {
+        sessionFinal = "";
+        state.userEdited = false;
+        if (rec) {
+          try { rec.onresult = null; rec.onerror = null; rec.onend = null; } catch (e) {}
+        }
+      }
+      function recoverMic() {
+        unlockMicNow();
+        clearTimeout(recoverTimer);
+        recoverTimer = setTimeout(unlockMicNow, 100);
+      }
+      function killRec() {
+        if (!rec) return;
+        try {
+          rec.onresult = null;
+          rec.onerror = null;
+          rec.onend = null;
+          rec.abort();
+        } catch (e) {
+          try { rec.stop(); } catch (e2) {}
+        }
+        rec = null;
+      }
+      function writeLive(finalPart, interimPart) {
+        if (state.userEdited) return;
+        setAnswer(normalizeReading((finalPart || "") + (interimPart || "")), true);
+      }
+      function startListen() {
+        clearTimeout(recoverTimer);
+        if (!SpeechRec) {
+          showToast("readToast", SPEECH_FAIL);
+          recoverMic();
+          focusAnswer();
+          return;
+        }
+        killRec();
+        resetSpeechMemory();
+        try {
+          rec = new SpeechRec();
+          rec.lang = state.lang;
+          rec.interimResults = true;
+          rec.continuous = true;
+          rec.maxAlternatives = 3;
+          rec.onresult = (e) => {
+            let interim = "", finals = "";
+            for (let i = 0; i < e.results.length; i++) {
+              const t = e.results[i][0].transcript;
+              if (e.results[i].isFinal) finals += t;
+              else interim += t;
+            }
+            sessionFinal = finals;
+            writeLive(finals, interim);
+          };
+          rec.onerror = (e) => {
+            if (e.error !== "aborted" && e.error !== "no-speech") showToast("readToast", SPEECH_FAIL);
+            recoverMic();
+            focusAnswer();
+          };
+          rec.onend = () => {
+            recoverMic();
+            answerEl().classList.remove("live");
+            if (!state.userEdited && sessionFinal) setAnswer(normalizeReading(sessionFinal), false);
+            focusAnswer();
+          };
+          rec.start();
+          state.listening = true;
+          $("micBtn").disabled = false;
+          $("micBtn").classList.add("listen");
+          $("readToast").classList.remove("show");
+        } catch (err) {
+          showToast("readToast", SPEECH_FAIL);
+          recoverMic();
+          focusAnswer();
+        }
+      }
+      function stopListen(silent) {
+        killRec();
+        recoverMic();
+        answerEl().classList.remove("live");
+        if (!silent && !state.userEdited && sessionFinal) setAnswer(normalizeReading(sessionFinal), false);
+      }
+
+      function newQuestion() {
+        if (state.ended) return;
+        stopListen(true);
+        state.digits = genNumber();
+        state.readings = readingsFor(state.digits);
+        state.cuts = new Set();
+        state.qStart = Date.now();
+        sessionFinal = "";
+        state.userEdited = false;
+        $("playerPill").textContent = `${state.classId} ${normalizeId(state.studentId)}`;
+        $("qPill").textContent = `第 ${state.qIndex} 題`;
+        $("taskCut").style.display = "flex";
+        $("taskRead").style.display = "none";
+        $("cutSuccess").classList.remove("show");
+        $("cutToast").classList.remove("show");
+        $("readToast").classList.remove("show");
+        setAnswer("");
+        renderCutBoard();
+      }
+
+      function startGame() {
+        const classId = $("classId").value.trim().toUpperCase();
+        const studentId = $("studentId").value.trim();
+        if (!classId || !studentId) { bounce($("startBtn")); return; }
+        unlockAudio();
+        state.classId = classId;
+        state.studentId = studentId;
+        state.qIndex = 1;
+        state.done = 0;
+        state.qTimes = [];
+        state.cutErrors = 0;
+        state.readZeroErrors = 0;
+        state.readOtherErrors = 0;
+        state.ended = false;
+        state.sheetSent = false;
+        $("reportModal").classList.remove("show");
+        ensureStudent();
+        showScreen("game");
+        startCountdown();
+        newQuestion();
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"'`]/g, (c) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;"
+        }[c]));
+      }
+
+      function renderDashboard(filterClass) {
+        const db = loadStore();
+        const logs = db.logs.filter((e) => !filterClass || filterClass === "ALL" || e.classId === filterClass);
+        const students = {};
+        logs.forEach((e) => { students[e.classId + "__" + e.studentId] = e; });
+        const list = Object.values(students);
+        const avgDone = logs.length ? Math.round((logs.reduce((n, e) => n + (e.done || 0), 0) / logs.length) * 10) / 10 : 0;
+        const cutTotal = logs.reduce((n, e) => n + (e.cutErrors || 0), 0);
+        const readTotal = logs.reduce((n, e) => n + (e.readErrors || 0), 0);
+        const classes = [...new Set(db.logs.map((s) => s.classId))].sort();
+        $("classFilter").innerHTML = `<option value="ALL">全部</option>` +
+          classes.map((c) => `<option value="${escapeHtml(c)}" ${c === filterClass ? "selected" : ""}>${escapeHtml(c)}</option>`).join("");
+        $("analysisCards").innerHTML = `
+          <div class="stat s1"><b>平均 3 分鐘完成題數</b><strong>${logs.length ? avgDone : "—"}</strong></div>
+          <div class="stat s2"><b>劃線錯誤總次數</b><strong>${cutTotal}</strong></div>
+          <div class="stat s3"><b>拼字讀數錯誤總次數</b><strong>${readTotal}</strong></div>
+        `;
+        if (!logs.length) {
+          $("studentRecords").innerHTML = `<div class="empty">未有紀錄</div>`;
+          return;
+        }
+        const grouped = {};
+        logs.forEach((e) => {
+          const k = e.classId + "__" + e.studentId;
+          if (!grouped[k]) grouped[k] = [];
+          grouped[k].push(e);
+        });
+        const keys = Object.keys(grouped).sort((ka, kb) => {
+          const a = grouped[ka][0], b = grouped[kb][0];
+          if (a.classId !== b.classId) return a.classId.localeCompare(b.classId, "zh-Hant");
+          const na = parseInt(a.studentId, 10), nb = parseInt(b.studentId, 10);
+          if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+          return String(a.studentId).localeCompare(String(b.studentId), "zh-Hant", { numeric: true });
+        });
+        $("studentRecords").innerHTML = keys.map((k) => {
+          const rows = grouped[k];
+          const s = rows[0];
+          const body = rows.map((e) => `<tr>
+            <td>${escapeHtml(e.classId)} ${escapeHtml(e.studentId)}</td>
+            <td>${e.done}</td>
+            <td>${e.avgSec || "—"}</td>
+            <td>${escapeHtml(e.diagnosis)}</td>
+            <td>${escapeHtml(e.time)}</td>
+          </tr>`).join("");
+          return `<article class="student-block">
+            <h3>${escapeHtml(s.classId)} ${escapeHtml(s.studentId)}</h3>
+            <table>
+              <thead><tr><th>班別學號</th><th>3分鐘完成總題數</th><th>平均每題用時(秒)</th><th>主要錯誤診斷</th><th>時間</th></tr></thead>
+              <tbody>${body}</tbody>
+            </table>
+          </article>`;
+        }).join("");
+      }
+
+      const canvas = $("confetti");
+      const ctx = canvas.getContext("2d");
+      let pieces = [];
+      function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+      window.addEventListener("resize", () => { resizeCanvas(); fitRow(); });
+      resizeCanvas();
+      function burstConfetti(count) {
+        const colors = ["#ff8fab", "#7ce0c3", "#ffe066", "#cbb2fe", "#8ecaff", "#ffc09f"];
+        for (let i = 0; i < count; i++) {
+          pieces.push({
+            x: canvas.width * (0.2 + Math.random() * 0.6), y: -12,
+            r: 4 + Math.random() * 6, c: colors[i % colors.length],
+            vx: -3 + Math.random() * 6, vy: 3 + Math.random() * 5,
+            rot: Math.random() * 360, vr: -8 + Math.random() * 16,
+            life: 80 + Math.random() * 40, shape: i % 3
+          });
+        }
+      }
+      (function tick() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        pieces = pieces.filter((p) => p.life > 0);
+        pieces.forEach((p) => {
+          p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.rot += p.vr; p.life -= 1;
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot * Math.PI / 180);
+          ctx.globalAlpha = Math.max(0, p.life / 70); ctx.fillStyle = p.c;
+          if (p.shape === 0) ctx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r);
+          else if (p.shape === 1) { ctx.beginPath(); ctx.arc(0, 0, p.r, 0, Math.PI * 2); ctx.fill(); }
+          else { ctx.beginPath(); ctx.moveTo(0, -p.r); ctx.lineTo(p.r, p.r); ctx.lineTo(-p.r, p.r); ctx.fill(); }
+          ctx.restore();
+        });
+        requestAnimationFrame(tick);
+      })();
+
+      renderKeys();
+      recoverMic();
+
+      $("startBtn").addEventListener("click", startGame);
+      $("teacherBtn").addEventListener("click", () => {
+        $("pinModal").classList.add("show");
+        $("pinInput").value = "";
+        $("pinInput").focus();
+      });
+      $("pinCancel").addEventListener("click", () => $("pinModal").classList.remove("show"));
+      $("pinOk").addEventListener("click", () => {
+        if ($("pinInput").value === TEACHER_PIN) {
+          $("pinModal").classList.remove("show");
+          renderDashboard("ALL");
+          showScreen("dash");
+        } else {
+          bounce($("pinInput"));
+          $("pinInput").classList.add("shake");
+          setTimeout(() => $("pinInput").classList.remove("shake"), 400);
+          $("pinInput").value = "";
+        }
+      });
+      $("pinInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pinOk").click(); });
+      $("dashBackBtn").addEventListener("click", () => showScreen("login"));
+      $("backLoginBtn").addEventListener("click", () => {
+        if (!state.ended && (state.done > 0 || state.cutErrors + state.readZeroErrors + state.readOtherErrors > 0)) {
+          endSession();
+          return;
+        }
+        $("studentId").value = "";
+        $("reportModal").classList.remove("show");
+        showScreen("login");
+        $("studentId").focus();
+      });
+      $("reportBackBtn").addEventListener("click", () => {
+        $("reportModal").classList.remove("show");
+        $("studentId").value = "";
+        showScreen("login");
+        $("studentId").focus();
+      });
+      $("printBtn").addEventListener("click", () => window.print());
+      $("classFilter").addEventListener("change", (e) => renderDashboard(e.target.value));
+      $("clearDataBtn").addEventListener("click", () => {
+        if (confirm("清空？")) { localStorage.removeItem(STORE_KEY); renderDashboard("ALL"); }
+      });
+      $("toReadBtn").addEventListener("click", enterRead);
+      $("submitReadBtn").addEventListener("click", submitRead);
+
+      answerEl().addEventListener("compositionstart", () => { state.composing = true; });
+      answerEl().addEventListener("compositionend", () => {
+        state.composing = false;
+        const el = answerEl();
+        const pos = el.selectionStart;
+        const next = normalizeReading(el.value);
+        if (next !== el.value) {
+          el.value = next;
+          try { el.setSelectionRange(Math.min(pos, next.length), Math.min(pos, next.length)); } catch (e) {}
+        }
+      });
+      answerEl().addEventListener("input", () => {
+        state.userEdited = true;
+        if (state.composing) return;
+        const el = answerEl();
+        const pos = el.selectionStart;
+        const next = el.value.replace(/[０-９]/g, (ch) => String(ch.charCodeAt(0) - 65296)).replace(/[0-9]/g, (d) => HAN[Number(d)]);
+        if (next !== el.value) {
+          el.value = next;
+          try { el.setSelectionRange(Math.min(pos, next.length), Math.min(pos, next.length)); } catch (e) {}
+        }
+      });
+      answerEl().addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey && !state.composing) { e.preventDefault(); submitRead(); }
+      });
+      $("langHK").addEventListener("click", () => { state.lang = "zh-HK"; $("langHK").classList.add("on"); $("langCN").classList.remove("on"); });
+      $("langCN").addEventListener("click", () => { state.lang = "zh-CN"; $("langCN").classList.add("on"); $("langHK").classList.remove("on"); });
+
+      $("micBtn").addEventListener("click", (e) => {
+        e.preventDefault();
+        bounce($("micBtn"));
+        if (state.listening) { stopListen(true); focusAnswer(); }
+        else startListen();
+      });
+      ["classId", "studentId"].forEach((id) => {
+        $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") startGame(); });
+      });
+    })();
+  </script>
+</body>
+</html>
