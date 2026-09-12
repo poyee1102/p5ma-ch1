@@ -216,8 +216,9 @@
     .stat b { display: block; font-size: 12px; opacity: 0.8; }
     .stat strong { font-size: clamp(16px, 2.6vh, 24px); display: block; line-height: 1.2; }
     .s1 { background: #ffe1ea; } .s2 { background: #d9f8ee; } .s3 { background: #fff1c7; }
-    .tools { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .tools { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 8px; }
     .tools select { border: 2px solid #ffe1ec; border-radius: 12px; padding: 4px 8px; font-weight: 800; background: #fff; }
+    .dash-src { font-size: 12px; font-weight: 800; color: var(--soft); }
     .records { flex: 1; min-height: 0; overflow: auto; }
     .student-block { margin-bottom: 8px; }
     .student-block h3 { background: #f6f0ff; border-radius: 10px; padding: 6px 10px; font-size: 13px; margin-bottom: 4px; }
@@ -330,14 +331,14 @@
         <h1>老師後台</h1>
         <div class="acts no-print">
           <button class="candy lemon tiny" id="printBtn">列印</button>
-          <button class="candy peach tiny" id="clearDataBtn">清空</button>
+          <button class="candy peach tiny" id="refreshDashBtn">重新整理</button>
           <button class="candy ghost tiny" id="dashBackBtn">返回</button>
         </div>
       </div>
       <div class="card dash">
         <div class="stats" id="analysisCards"></div>
         <div class="tools">
-          <strong>學生紀錄</strong>
+          <strong>全班紀錄 <small id="dashSource" class="dash-src"></small></strong>
           <select id="classFilter"></select>
         </div>
         <div class="records" id="studentRecords"></div>
@@ -384,8 +385,11 @@
       var lastRow = sh.getLastRow();
       if (lastRow >= 2) sh.getRange(2, 2, lastRow - 1, 1).setValue("p5ma-ch1");
     }
+    function sheet_() {
+      return SpreadsheetApp.openById("1b9PRoZV2jNb1CRvZTjxF-wqL4Yui6JhjmOEJkn9t4n8").getSheets()[0];
+    }
     function doPost(e) {
-      var sh = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+      var sh = sheet_();
       ensureHeaders_(sh);
       var data = {};
       try { data = JSON.parse(e.postData.contents); } catch (err) {}
@@ -398,6 +402,37 @@
         data.diagnostic || ""
       ]);
       return ContentService.createTextOutput("ok");
+    }
+    function doGet(e) {
+      var sh = sheet_();
+      ensureHeaders_(sh);
+      var game = (e && e.parameter && e.parameter.game) || "";
+      var lastRow = sh.getLastRow();
+      var lastCol = Math.max(sh.getLastColumn(), 1);
+      var rows = [];
+      if (lastRow >= 2) {
+        var values = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+        for (var i = 0; i < values.length; i++) {
+          var r = values[i];
+          var recGame = String(r[1] || "");
+          if (game && recGame && recGame !== game) continue;
+          var t = r[0];
+          var timeText = (t instanceof Date && !isNaN(t.getTime()))
+            ? Utilities.formatDate(t, "Asia/Hong_Kong", "yyyy/MM/dd HH:mm")
+            : String(t || "");
+          rows.push({
+            time: timeText, game: recGame, student: String(r[2] || ""),
+            score: r[3], avgTime: String(r[4] || ""), diagnostic: String(r[5] || "")
+          });
+        }
+      }
+      var json = JSON.stringify({ ok: true, rows: rows });
+      var cb = e && e.parameter && e.parameter.callback;
+      if (cb && /^[A-Za-z0-9_]+$/.test(cb)) {
+        return ContentService.createTextOutput(cb + "(" + json + ")")
+          .setMimeType(ContentService.MimeType.JAVASCRIPT);
+      }
+      return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
     }
   -->
   <script>
@@ -527,6 +562,67 @@
             body: JSON.stringify(payload)
           }).catch(function () {});
         } catch (err) {}
+      }
+
+      let sheetLogsCache = null;
+      let dashSeq = 0;
+      function parseSheetStudent(s) {
+        const m = String(s || "").match(/^(.+?)\s*\(([^)]+)\)/);
+        if (m) return { classId: m[1].trim(), studentId: normalizeId(m[2].trim()) };
+        return { classId: "", studentId: String(s || "").trim() };
+      }
+      function parseAvgSec(s) {
+        const m = String(s || "").match(/(\d+)/);
+        return m ? Number(m[1]) : 0;
+      }
+      function rowsToLogs(rows) {
+        return (rows || []).map((r) => {
+          const who = parseSheetStudent(r.student);
+          const diagnostic = String(r.diagnostic || "");
+          return {
+            classId: who.classId,
+            studentId: who.studentId,
+            done: Number(r.score) || 0,
+            avgSec: parseAvgSec(r.avgTime),
+            diagnosis: diagnostic,
+            cutErrors: /劃線/.test(diagnostic) ? 1 : 0,
+            readErrors: /讀數/.test(diagnostic) ? 1 : 0,
+            time: r.time || "",
+            game: r.game || ""
+          };
+        }).filter((e) => e.studentId || e.classId);
+      }
+      function jsonpSheet(url) {
+        return new Promise((resolve, reject) => {
+          const cb = "cutcutDash" + Date.now();
+          const s = document.createElement("script");
+          const timer = setTimeout(() => { cleanup(); reject(new Error("timeout")); }, 15000);
+          function cleanup() {
+            clearTimeout(timer);
+            try { delete window[cb]; } catch (err) { window[cb] = undefined; }
+            if (s.parentNode) s.parentNode.removeChild(s);
+          }
+          window[cb] = function (data) { cleanup(); resolve(data); };
+          s.onerror = function () { cleanup(); reject(new Error("script")); };
+          s.src = url + (url.indexOf("?") >= 0 ? "&" : "?") + "callback=" + cb;
+          document.body.appendChild(s);
+        });
+      }
+      async function loadSheetLogs(force) {
+        if (sheetLogsCache && !force) return sheetLogsCache;
+        if (!sheetConfigured()) throw new Error("no-url");
+        const url = GOOGLE_SHEET_URL + "?game=" + encodeURIComponent(GAME_ID);
+        let data = null;
+        try {
+          const res = await fetch(url, { method: "GET" });
+          if (!res.ok) throw new Error("http");
+          data = await res.json();
+        } catch (err) {
+          data = await jsonpSheet(url);
+        }
+        if (!data || !data.ok) throw new Error("bad");
+        sheetLogsCache = rowsToLogs(data.rows);
+        return sheetLogsCache;
       }
 
       function saveSession() {
@@ -1078,25 +1174,40 @@
         }[c]));
       }
 
-      function renderDashboard(filterClass) {
-        const db = loadStore();
-        const logs = db.logs.filter((e) => !filterClass || filterClass === "ALL" || e.classId === filterClass);
-        const students = {};
-        logs.forEach((e) => { students[e.classId + "__" + e.studentId] = e; });
-        const list = Object.values(students);
+      async function renderDashboard(filterClass, force) {
+        const seq = ++dashSeq;
+        $("studentRecords").innerHTML = `<div class="empty">載入全班分數…</div>`;
+        $("analysisCards").innerHTML = `
+          <div class="stat s1"><b>平均 3 分鐘完成題數</b><strong>…</strong></div>
+          <div class="stat s2"><b>劃線需加強人次</b><strong>…</strong></div>
+          <div class="stat s3"><b>讀數需加強人次</b><strong>…</strong></div>
+        `;
+        if ($("dashSource")) $("dashSource").textContent = "";
+        let allLogs = [];
+        let source = "";
+        try {
+          allLogs = await loadSheetLogs(!!force);
+          source = "Google 試算表";
+        } catch (err) {
+          allLogs = loadStore().logs;
+          source = "本機（未能連線試算表）";
+        }
+        if (seq !== dashSeq) return;
+        if ($("dashSource")) $("dashSource").textContent = source;
+        const logs = allLogs.filter((e) => !filterClass || filterClass === "ALL" || e.classId === filterClass);
         const avgDone = logs.length ? Math.round((logs.reduce((n, e) => n + (e.done || 0), 0) / logs.length) * 10) / 10 : 0;
         const cutTotal = logs.reduce((n, e) => n + (e.cutErrors || 0), 0);
         const readTotal = logs.reduce((n, e) => n + (e.readErrors || 0), 0);
-        const classes = [...new Set(db.logs.map((s) => s.classId))].sort();
+        const classes = [...new Set(allLogs.map((s) => s.classId).filter(Boolean))].sort();
         $("classFilter").innerHTML = `<option value="ALL">全部</option>` +
           classes.map((c) => `<option value="${escapeHtml(c)}" ${c === filterClass ? "selected" : ""}>${escapeHtml(c)}</option>`).join("");
         $("analysisCards").innerHTML = `
           <div class="stat s1"><b>平均 3 分鐘完成題數</b><strong>${logs.length ? avgDone : "—"}</strong></div>
-          <div class="stat s2"><b>劃線錯誤總次數</b><strong>${cutTotal}</strong></div>
-          <div class="stat s3"><b>拼字讀數錯誤總次數</b><strong>${readTotal}</strong></div>
+          <div class="stat s2"><b>劃線需加強人次</b><strong>${cutTotal}</strong></div>
+          <div class="stat s3"><b>讀數需加強人次</b><strong>${readTotal}</strong></div>
         `;
         if (!logs.length) {
-          $("studentRecords").innerHTML = `<div class="empty">未有紀錄</div>`;
+          $("studentRecords").innerHTML = `<div class="empty">${source.indexOf("未能") >= 0 ? "未能連線 Google 試算表" : "未有紀錄"}</div>`;
           return;
         }
         const grouped = {};
@@ -1178,8 +1289,8 @@
       $("pinOk").addEventListener("click", () => {
         if ($("pinInput").value === TEACHER_PIN) {
           $("pinModal").classList.remove("show");
-          renderDashboard("ALL");
           showScreen("dash");
+          renderDashboard("ALL", true);
         } else {
           bounce($("pinInput"));
           $("pinInput").classList.add("shake");
@@ -1206,10 +1317,8 @@
         $("studentId").focus();
       });
       $("printBtn").addEventListener("click", () => window.print());
-      $("classFilter").addEventListener("change", (e) => renderDashboard(e.target.value));
-      $("clearDataBtn").addEventListener("click", () => {
-        if (confirm("清空？")) { localStorage.removeItem(STORE_KEY); renderDashboard("ALL"); }
-      });
+      $("classFilter").addEventListener("change", (e) => renderDashboard(e.target.value, false));
+      $("refreshDashBtn").addEventListener("click", () => renderDashboard($("classFilter").value || "ALL", true));
       $("toReadBtn").addEventListener("click", enterRead);
       $("submitReadBtn").addEventListener("click", submitRead);
 
