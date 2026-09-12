@@ -217,21 +217,48 @@
     .stat strong { font-size: clamp(16px, 2.6vh, 24px); display: block; line-height: 1.2; }
     .s1 { background: #ffe1ea; } .s2 { background: #d9f8ee; } .s3 { background: #fff1c7; }
     .tools { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 8px; flex-wrap: wrap; }
-    .tools select { border: 2px solid #ffe1ec; border-radius: 12px; padding: 4px 8px; font-weight: 800; background: #fff; }
+    .tools select, .tools button.tiny { border: 2px solid #ffe1ec; border-radius: 12px; padding: 4px 8px; font-weight: 800; background: #fff; }
     .tool-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     .dash-src { font-size: 12px; font-weight: 800; color: var(--soft); }
+    .dash-count { font-size: 12px; font-weight: 800; color: var(--soft); }
     .records { flex: 1; min-height: 0; overflow: auto; }
-    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; }
     th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(59,42,74,0.08); font-size: 12px; }
-    th { background: #fff3f8; }
-    th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
-    th.sortable:hover { background: #ffd6e8; }
-    th.sorted { color: #ef5f8a; }
+    th { background: #fff3f8; position: sticky; top: 0; z-index: 2; white-space: nowrap; }
+    th.col-h { padding-right: 4px; }
+    .col-sort { border: 0; background: transparent; font: inherit; font-weight: 900; cursor: pointer; padding: 0; }
+    th.sorted .col-sort { color: #ef5f8a; }
+    .filter-btn {
+      border: 0; background: #ffe1ec; color: var(--ink); cursor: pointer;
+      border-radius: 8px; width: 22px; height: 22px; margin-left: 4px;
+      font-size: 12px; font-weight: 900; line-height: 1; vertical-align: middle;
+    }
+    .filter-btn.on { background: var(--pink); color: #fff; }
     .score-cell { font-variant-numeric: tabular-nums; font-weight: 900; text-align: center; }
     th.score-h, td.rank-cell { text-align: center; font-variant-numeric: tabular-nums; }
     tr.hi .score-cell { color: #165f4c; }
     tr.lo .score-cell { color: #b42318; }
     .empty { text-align: center; padding: 20px; font-weight: 800; color: var(--soft); }
+    .filter-menu {
+      position: fixed; z-index: 30; width: min(280px, calc(100vw - 16px));
+      background: #fff; border-radius: 18px; padding: 10px;
+      box-shadow: 0 16px 36px rgba(59,42,74,0.24); border: 2px solid #ffe1ec;
+      display: none; flex-direction: column; gap: 8px; max-height: min(420px, 70vh);
+    }
+    .filter-menu.show { display: flex; }
+    .filter-menu .fm-title { font-weight: 900; font-size: 14px; text-align: left; }
+    .filter-menu .fm-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-menu .fm-acts button {
+      border: 0; border-radius: 999px; font-weight: 900; padding: 6px 10px; font-size: 12px;
+      background: #f6f0ff; color: var(--ink); cursor: pointer;
+    }
+    .filter-menu input[type="search"] {
+      width: 100%; border: 2px solid #ffe1ec; border-radius: 12px;
+      padding: 6px 8px; font-weight: 800; font-size: 14px;
+    }
+    .filter-menu .opts { overflow: auto; text-align: left; flex: 1; min-height: 80px; }
+    .filter-menu label { display: flex; gap: 8px; align-items: flex-start; padding: 5px 2px; font-weight: 800; font-size: 13px; cursor: pointer; }
+    .filter-menu label input { margin-top: 2px; }
 
     .modal { position: fixed; inset: 0; background: rgba(59,42,74,0.4); display: none; place-items: center; z-index: 20; padding: 16px; }
     .modal.show { display: grid; }
@@ -257,7 +284,7 @@
     }
     @media print {
       html, body, .app, .screen.active { position: static; height: auto; overflow: visible; }
-      .no-print, canvas, .report, .modal { display: none !important; }
+      .no-print, canvas, .report, .modal, .filter-menu, .filter-btn { display: none !important; }
       .records { overflow: visible; }
       body { background: #fff; }
     }
@@ -347,12 +374,8 @@
           <strong>全班紀錄 <small id="dashSource" class="dash-src"></small></strong>
           <div class="tool-filters">
             <select id="classFilter" aria-label="班別"></select>
-            <select id="sortFilter" aria-label="排序">
-              <option value="score-desc">答對題數：高 → 低</option>
-              <option value="score-asc">答對題數：低 → 高</option>
-              <option value="id">學號</option>
-              <option value="time-desc">時間：新 → 舊</option>
-            </select>
+            <span class="dash-count" id="dashCount"></span>
+            <button type="button" class="tiny" id="clearFiltersBtn">清除篩選</button>
           </div>
         </div>
         <div class="records" id="studentRecords"></div>
@@ -369,6 +392,8 @@
       <button class="candy pink" id="reportBackBtn">完成</button>
     </div>
   </div>
+
+  <div id="dashFilterMenu" class="filter-menu"></div>
 
   <div class="modal" id="pinModal">
     <div class="modal-card">
@@ -580,7 +605,18 @@
 
       let sheetLogsCache = null;
       let dashSeq = 0;
-      let dashSort = "score-desc";
+      let dashAllLogs = [];
+      let dashClass = "ALL";
+      let dashSort = { col: "score", dir: "desc" };
+      let dashFilters = {};
+      let dashMenuCol = "";
+      const DASH_COLS = [
+        { key: "student", label: "班別學號", numeric: false },
+        { key: "score", label: "答對題數", numeric: true },
+        { key: "avg", label: "平均用時(秒)", numeric: true },
+        { key: "diagnosis", label: "診斷", numeric: false },
+        { key: "time", label: "時間", numeric: false }
+      ];
       function parseSheetStudent(s) {
         const m = String(s || "").match(/^(.+?)\s*\(([^)]+)\)/);
         if (m) return { classId: m[1].trim(), studentId: normalizeId(m[2].trim()) };
@@ -1195,69 +1231,194 @@
         if (!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) return na - nb;
         return String(a.studentId).localeCompare(String(b.studentId), "zh-Hant", { numeric: true });
       }
-      function sortLogs(logs, mode) {
-        const arr = logs.slice();
-        if (mode === "score-asc") arr.sort((a, b) => (a.done - b.done) || cmpStudent(a, b));
-        else if (mode === "id") arr.sort(cmpStudent);
-        else if (mode === "time-desc") {
-          arr.sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")) || (b.done - a.done));
-        } else {
-          arr.sort((a, b) => (b.done - a.done) || cmpStudent(a, b));
-        }
+      function timeDay(t) {
+        const s = String(t || "");
+        const m = s.match(/^\d{4}\/\d{2}\/\d{2}/);
+        return m ? m[0] : (s || "（空白）");
+      }
+      function colValue(key, e) {
+        if (key === "student") return `${e.classId} ${e.studentId}`.trim() || "（空白）";
+        if (key === "score") return String(e.done);
+        if (key === "avg") return e.avgSec ? String(e.avgSec) : "—";
+        if (key === "diagnosis") return e.diagnosis || "（空白）";
+        return timeDay(e.time);
+      }
+      function classLogs() {
+        if (!dashClass || dashClass === "ALL") return dashAllLogs;
+        return dashAllLogs.filter((e) => e.classId === dashClass);
+      }
+      function uniqueValues(key) {
+        const set = new Set();
+        classLogs().forEach((e) => set.add(colValue(key, e)));
+        const arr = [...set];
+        const spec = DASH_COLS.find((c) => c.key === key);
+        arr.sort((a, b) => {
+          if (spec && spec.numeric) {
+            const na = Number(a), nb = Number(b);
+            const fa = Number.isFinite(na), fb = Number.isFinite(nb);
+            if (fa && fb) return na - nb;
+            if (fa) return -1;
+            if (fb) return 1;
+          }
+          return String(a).localeCompare(String(b), "zh-Hant", { numeric: true });
+        });
         return arr;
       }
-      function sortArrow(mode, col) {
-        if (col === "score" && mode === "score-desc") return " ▼";
-        if (col === "score" && mode === "score-asc") return " ▲";
-        if (col === "id" && mode === "id") return " ▼";
-        if (col === "time" && mode === "time-desc") return " ▼";
-        return "";
+      function filterActive(key) {
+        const sel = dashFilters[key];
+        return !!(sel && sel.size < uniqueValues(key).length);
       }
-      async function renderDashboard(filterClass, force) {
-        const seq = ++dashSeq;
-        if ($("sortFilter") && $("sortFilter").value) dashSort = $("sortFilter").value;
-        $("studentRecords").innerHTML = `<div class="empty">載入全班分數…</div>`;
-        $("analysisCards").innerHTML = `
-          <div class="stat s1"><b>平均 3 分鐘完成題數</b><strong>…</strong></div>
-          <div class="stat s2"><b>劃線需加強人次</b><strong>…</strong></div>
-          <div class="stat s3"><b>讀數需加強人次</b><strong>…</strong></div>
+      function anyFilterOn() {
+        return DASH_COLS.some((c) => filterActive(c.key));
+      }
+      function passesFilters(e) {
+        return DASH_COLS.every((col) => {
+          const sel = dashFilters[col.key];
+          if (!sel) return true;
+          return sel.has(colValue(col.key, e));
+        });
+      }
+      function sortLogs(logs) {
+        const col = dashSort.col;
+        const m = dashSort.dir === "asc" ? 1 : -1;
+        return logs.slice().sort((a, b) => {
+          let c = 0;
+          if (col === "score") c = a.done - b.done;
+          else if (col === "avg") c = (a.avgSec || 0) - (b.avgSec || 0);
+          else if (col === "student") c = cmpStudent(a, b);
+          else if (col === "time") c = String(a.time || "").localeCompare(String(b.time || ""));
+          else if (col === "diagnosis") c = String(a.diagnosis || "").localeCompare(String(b.diagnosis || ""), "zh-Hant");
+          return (c * m) || cmpStudent(a, b);
+        });
+      }
+      function sortMark(key) {
+        if (dashSort.col !== key) return "";
+        return dashSort.dir === "asc" ? " ▲" : " ▼";
+      }
+      function closeFilterMenu() {
+        dashMenuCol = "";
+        const menu = $("dashFilterMenu");
+        if (menu) menu.classList.remove("show");
+      }
+      function resetDashFilters() {
+        dashFilters = {};
+        dashSort = { col: "score", dir: "desc" };
+        dashClass = "ALL";
+        closeFilterMenu();
+      }
+      function placeFilterMenu(anchor) {
+        const menu = $("dashFilterMenu");
+        const r = anchor.getBoundingClientRect();
+        menu.classList.add("show");
+        const w = menu.offsetWidth || 260;
+        const h = menu.offsetHeight || 280;
+        let left = Math.min(r.left, window.innerWidth - w - 8);
+        let top = r.bottom + 4;
+        if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4);
+        if (left < 8) left = 8;
+        menu.style.left = left + "px";
+        menu.style.top = top + "px";
+      }
+      function renderFilterMenu(key, q) {
+        const spec = DASH_COLS.find((c) => c.key === key);
+        if (!spec) return;
+        const values = uniqueValues(key);
+        const sel = dashFilters[key];
+        const query = String(q || "").trim();
+        const shown = query ? values.filter((v) => String(v).indexOf(query) !== -1) : values;
+        const allOn = !sel;
+        const sortDesc = key === "time" ? "新 → 舊" : (spec.numeric ? "由高到低" : "由 Z 到 A");
+        const sortAsc = key === "time" ? "舊 → 新" : (spec.numeric ? "由低到高" : "由 A 到 Z");
+        $("dashFilterMenu").innerHTML = `
+          <div class="fm-title">篩選：${escapeHtml(spec.label)}</div>
+          <div class="fm-acts">
+            <button type="button" data-fm="sort-desc">${sortDesc}</button>
+            <button type="button" data-fm="sort-asc">${sortAsc}</button>
+          </div>
+          <input type="search" id="fmSearch" placeholder="搜尋" value="${escapeHtml(query)}" />
+          <div class="fm-acts">
+            <button type="button" data-fm="all">全選</button>
+            <button type="button" data-fm="none">全不選</button>
+            <button type="button" data-fm="clear">清除此欄</button>
+          </div>
+          <div class="opts">
+            ${shown.map((v) => {
+              const on = allOn || sel.has(v);
+              const idx = values.indexOf(v);
+              return `<label><input type="checkbox" data-idx="${idx}" ${on ? "checked" : ""} />${escapeHtml(v)}</label>`;
+            }).join("") || `<div class="empty">沒有項目</div>`}
+          </div>
         `;
-        if ($("dashSource")) $("dashSource").textContent = "";
-        let allLogs = [];
-        let source = "";
-        try {
-          allLogs = await loadSheetLogs(!!force);
-          source = "Google 試算表";
-        } catch (err) {
-          allLogs = loadStore().logs;
-          source = "本機（未能連線試算表）";
+        const search = $("fmSearch");
+        if (search) {
+          search.focus();
+          const n = search.value.length;
+          try { search.setSelectionRange(n, n); } catch (err) {}
         }
-        if (seq !== dashSeq) return;
-        if ($("dashSource")) $("dashSource").textContent = source;
-        const logs = allLogs.filter((e) => !filterClass || filterClass === "ALL" || e.classId === filterClass);
+      }
+      function openFilterMenu(key, anchor) {
+        dashMenuCol = key;
+        renderFilterMenu(key, "");
+        placeFilterMenu(anchor);
+      }
+      function setColFilter(key, nextSet) {
+        const all = uniqueValues(key);
+        if (!nextSet || nextSet.size === all.length) dashFilters[key] = null;
+        else dashFilters[key] = nextSet;
+        paintDash();
+        if (dashMenuCol === key) {
+          const q = ($("fmSearch") && $("fmSearch").value) || "";
+          renderFilterMenu(key, q);
+          const btn = document.querySelector(`.filter-btn[data-filter="${key}"]`);
+          if (btn) placeFilterMenu(btn);
+        }
+      }
+      function paintDash() {
+        DASH_COLS.forEach((col) => {
+          const sel = dashFilters[col.key];
+          if (!sel) return;
+          const all = new Set(uniqueValues(col.key));
+          const next = new Set([...sel].filter((v) => all.has(v)));
+          dashFilters[col.key] = next.size === all.size ? null : next;
+        });
+        const sourceEl = $("dashSource");
+        const base = classLogs();
+        const logs = base.filter(passesFilters);
         const avgDone = logs.length ? Math.round((logs.reduce((n, e) => n + (e.done || 0), 0) / logs.length) * 10) / 10 : 0;
         const cutTotal = logs.reduce((n, e) => n + (e.cutErrors || 0), 0);
         const readTotal = logs.reduce((n, e) => n + (e.readErrors || 0), 0);
-        const classes = [...new Set(allLogs.map((s) => s.classId).filter(Boolean))].sort();
+        const classes = [...new Set(dashAllLogs.map((s) => s.classId).filter(Boolean))].sort();
         $("classFilter").innerHTML = `<option value="ALL">全部班別</option>` +
-          classes.map((c) => `<option value="${escapeHtml(c)}" ${c === filterClass ? "selected" : ""}>${escapeHtml(c)}</option>`).join("");
-        if ($("sortFilter")) $("sortFilter").value = dashSort;
+          classes.map((c) => `<option value="${escapeHtml(c)}" ${c === dashClass ? "selected" : ""}>${escapeHtml(c)}</option>`).join("");
         $("analysisCards").innerHTML = `
           <div class="stat s1"><b>平均 3 分鐘完成題數</b><strong>${logs.length ? avgDone : "—"}</strong></div>
           <div class="stat s2"><b>劃線需加強人次</b><strong>${cutTotal}</strong></div>
           <div class="stat s3"><b>讀數需加強人次</b><strong>${readTotal}</strong></div>
         `;
-        if (!logs.length) {
-          $("studentRecords").innerHTML = `<div class="empty">${source.indexOf("未能") >= 0 ? "未能連線 Google 試算表" : "未有紀錄"}</div>`;
+        if ($("dashCount")) {
+          $("dashCount").textContent = dashAllLogs.length ? `顯示 ${logs.length} / ${base.length} 筆` : "";
+        }
+        if ($("clearFiltersBtn")) $("clearFiltersBtn").style.visibility = anyFilterOn() ? "visible" : "hidden";
+        if (!dashAllLogs.length) {
+          $("studentRecords").innerHTML = `<div class="empty">${sourceEl && sourceEl.textContent.indexOf("未能") >= 0 ? "未能連線 Google 試算表" : "未有紀錄"}</div>`;
           return;
         }
-        const ranked = sortLogs(logs, dashSort);
+        const ranked = sortLogs(logs);
         const scores = ranked.map((e) => e.done || 0).slice().sort((a, b) => a - b);
-        const hiCut = scores[Math.max(0, scores.length - Math.ceil(scores.length * 0.2))] || 0;
-        const loCut = scores[Math.min(scores.length - 1, Math.floor(scores.length * 0.2))] || 0;
-        const showRank = dashSort === "score-desc" || dashSort === "score-asc";
-        const body = ranked.map((e, i) => {
-          const rank = dashSort === "score-asc" ? ranked.length - i : i + 1;
+        const hiCut = scores.length ? scores[Math.max(0, scores.length - Math.ceil(scores.length * 0.2))] || 0 : 0;
+        const loCut = scores.length ? scores[Math.min(scores.length - 1, Math.floor(scores.length * 0.2))] || 0 : 0;
+        const showRank = dashSort.col === "score";
+        const head = (key, extra) => {
+          const spec = DASH_COLS.find((c) => c.key === key);
+          const on = filterActive(key);
+          const sorted = dashSort.col === key ? " sorted" : "";
+          return `<th class="col-h${extra || ""}${sorted}" data-col="${key}">
+            <button type="button" class="col-sort" data-sort="${key}">${escapeHtml(spec.label)}${sortMark(key)}</button>
+            <button type="button" class="filter-btn${on ? " on" : ""}" data-filter="${key}" aria-label="篩選${escapeHtml(spec.label)}">▼</button>
+          </th>`;
+        };
+        const body = ranked.length ? ranked.map((e, i) => {
+          const rank = dashSort.dir === "asc" ? ranked.length - i : i + 1;
           const hi = e.done >= hiCut && e.done > 0;
           const lo = e.done <= loCut;
           return `<tr class="${hi ? "hi" : lo ? "lo" : ""}">
@@ -1268,18 +1429,39 @@
             <td>${escapeHtml(e.diagnosis)}</td>
             <td>${escapeHtml(e.time)}</td>
           </tr>`;
-        }).join("");
+        }).join("") : `<tr><td colspan="${showRank ? 6 : 5}" class="empty">呢組篩選冇紀錄，可再撳 ▼ 改篩選</td></tr>`;
         $("studentRecords").innerHTML = `<table>
           <thead><tr>
             ${showRank ? `<th class="score-h">名次</th>` : ""}
-            <th class="sortable${dashSort === "id" ? " sorted" : ""}" data-sort="id">班別學號${sortArrow(dashSort, "id")}</th>
-            <th class="sortable score-h${dashSort === "score-desc" || dashSort === "score-asc" ? " sorted" : ""}" data-sort="score">答對題數${sortArrow(dashSort, "score")}</th>
-            <th>平均用時(秒)</th>
-            <th>診斷</th>
-            <th class="sortable${dashSort === "time-desc" ? " sorted" : ""}" data-sort="time">時間${sortArrow(dashSort, "time")}</th>
+            ${head("student")}
+            ${head("score", " score-h")}
+            ${head("avg")}
+            ${head("diagnosis")}
+            ${head("time")}
           </tr></thead>
           <tbody>${body}</tbody>
         </table>`;
+      }
+      async function renderDashboard(filterClass, force) {
+        const seq = ++dashSeq;
+        if (filterClass) dashClass = filterClass;
+        $("studentRecords").innerHTML = `<div class="empty">載入全班分數…</div>`;
+        $("analysisCards").innerHTML = `
+          <div class="stat s1"><b>平均 3 分鐘完成題數</b><strong>…</strong></div>
+          <div class="stat s2"><b>劃線需加強人次</b><strong>…</strong></div>
+          <div class="stat s3"><b>讀數需加強人次</b><strong>…</strong></div>
+        `;
+        let source = "";
+        try {
+          dashAllLogs = await loadSheetLogs(!!force);
+          source = "Google 試算表";
+        } catch (err) {
+          dashAllLogs = loadStore().logs;
+          source = "本機（未能連線試算表）";
+        }
+        if (seq !== dashSeq) return;
+        if ($("dashSource")) $("dashSource").textContent = source;
+        paintDash();
       }
 
       const canvas = $("confetti");
@@ -1328,6 +1510,7 @@
       $("pinOk").addEventListener("click", () => {
         if ($("pinInput").value === TEACHER_PIN) {
           $("pinModal").classList.remove("show");
+          resetDashFilters();
           showScreen("dash");
           renderDashboard("ALL", true);
         } else {
@@ -1338,7 +1521,7 @@
         }
       });
       $("pinInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pinOk").click(); });
-      $("dashBackBtn").addEventListener("click", () => showScreen("login"));
+      $("dashBackBtn").addEventListener("click", () => { closeFilterMenu(); showScreen("login"); });
       $("backLoginBtn").addEventListener("click", () => {
         if (!state.ended && (state.done > 0 || state.cutErrors + state.readZeroErrors + state.readOtherErrors > 0)) {
           endSession();
@@ -1356,20 +1539,69 @@
         $("studentId").focus();
       });
       $("printBtn").addEventListener("click", () => window.print());
-      $("classFilter").addEventListener("change", (e) => renderDashboard(e.target.value, false));
-      $("sortFilter").addEventListener("change", (e) => {
-        dashSort = e.target.value;
-        renderDashboard($("classFilter").value || "ALL", false);
+      $("classFilter").addEventListener("change", (e) => {
+        dashClass = e.target.value || "ALL";
+        closeFilterMenu();
+        paintDash();
+      });
+      $("clearFiltersBtn").addEventListener("click", () => {
+        dashFilters = {};
+        closeFilterMenu();
+        paintDash();
       });
       $("studentRecords").addEventListener("click", (e) => {
-        const th = e.target.closest("th.sortable");
-        if (!th) return;
-        const col = th.getAttribute("data-sort");
-        if (col === "score") dashSort = dashSort === "score-desc" ? "score-asc" : "score-desc";
-        else if (col === "id") dashSort = "id";
-        else if (col === "time") dashSort = "time-desc";
-        if ($("sortFilter")) $("sortFilter").value = dashSort;
-        renderDashboard($("classFilter").value || "ALL", false);
+        const fb = e.target.closest(".filter-btn");
+        if (fb) {
+          e.stopPropagation();
+          const key = fb.getAttribute("data-filter");
+          if (dashMenuCol === key && $("dashFilterMenu").classList.contains("show")) closeFilterMenu();
+          else openFilterMenu(key, fb);
+          return;
+        }
+        const sb = e.target.closest(".col-sort");
+        if (!sb) return;
+        const key = sb.getAttribute("data-sort");
+        if (dashSort.col === key) dashSort.dir = dashSort.dir === "desc" ? "asc" : "desc";
+        else dashSort = { col: key, dir: (key === "student" || key === "diagnosis") ? "asc" : "desc" };
+        paintDash();
+      });
+      $("dashFilterMenu").addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-fm]");
+        if (!btn || !dashMenuCol) return;
+        const act = btn.getAttribute("data-fm");
+        const key = dashMenuCol;
+        if (act === "sort-desc") { dashSort = { col: key, dir: "desc" }; paintDash(); }
+        else if (act === "sort-asc") { dashSort = { col: key, dir: "asc" }; paintDash(); }
+        else if (act === "all" || act === "clear") setColFilter(key, null);
+        else if (act === "none") setColFilter(key, new Set());
+        if (act === "sort-desc" || act === "sort-asc") {
+          const anchor = document.querySelector(`.filter-btn[data-filter="${key}"]`);
+          if (anchor) placeFilterMenu(anchor);
+        }
+      });
+      $("dashFilterMenu").addEventListener("change", (e) => {
+        const inp = e.target;
+        if (!inp.matches || !inp.matches("input[type='checkbox'][data-idx]")) return;
+        const key = dashMenuCol;
+        const values = uniqueValues(key);
+        const val = values[Number(inp.getAttribute("data-idx"))];
+        if (val == null) return;
+        const all = values;
+        const sel = dashFilters[key] ? new Set(dashFilters[key]) : new Set(all);
+        if (inp.checked) sel.add(val); else sel.delete(val);
+        setColFilter(key, sel);
+      });
+      $("dashFilterMenu").addEventListener("input", (e) => {
+        if (e.target.id !== "fmSearch" || !dashMenuCol) return;
+        renderFilterMenu(dashMenuCol, e.target.value);
+        const btn = document.querySelector(`.filter-btn[data-filter="${dashMenuCol}"]`);
+        if (btn) placeFilterMenu(btn);
+      });
+      document.addEventListener("click", (e) => {
+        const menu = $("dashFilterMenu");
+        if (!menu || !menu.classList.contains("show")) return;
+        if (menu.contains(e.target) || e.target.closest(".filter-btn")) return;
+        closeFilterMenu();
       });
       $("refreshDashBtn").addEventListener("click", () => renderDashboard($("classFilter").value || "ALL", true));
       $("toReadBtn").addEventListener("click", enterRead);
