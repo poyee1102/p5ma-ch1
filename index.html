@@ -216,15 +216,21 @@
     .stat b { display: block; font-size: 12px; opacity: 0.8; }
     .stat strong { font-size: clamp(16px, 2.6vh, 24px); display: block; line-height: 1.2; }
     .s1 { background: #ffe1ea; } .s2 { background: #d9f8ee; } .s3 { background: #fff1c7; }
-    .tools { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 8px; }
+    .tools { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 8px; flex-wrap: wrap; }
     .tools select { border: 2px solid #ffe1ec; border-radius: 12px; padding: 4px 8px; font-weight: 800; background: #fff; }
+    .tool-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     .dash-src { font-size: 12px; font-weight: 800; color: var(--soft); }
     .records { flex: 1; min-height: 0; overflow: auto; }
-    .student-block { margin-bottom: 8px; }
-    .student-block h3 { background: #f6f0ff; border-radius: 10px; padding: 6px 10px; font-size: 13px; margin-bottom: 4px; }
     table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
     th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(59,42,74,0.08); font-size: 12px; }
     th { background: #fff3f8; }
+    th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    th.sortable:hover { background: #ffd6e8; }
+    th.sorted { color: #ef5f8a; }
+    .score-cell { font-variant-numeric: tabular-nums; font-weight: 900; text-align: center; }
+    th.score-h, td.rank-cell { text-align: center; font-variant-numeric: tabular-nums; }
+    tr.hi .score-cell { color: #165f4c; }
+    tr.lo .score-cell { color: #b42318; }
     .empty { text-align: center; padding: 20px; font-weight: 800; color: var(--soft); }
 
     .modal { position: fixed; inset: 0; background: rgba(59,42,74,0.4); display: none; place-items: center; z-index: 20; padding: 16px; }
@@ -339,7 +345,15 @@
         <div class="stats" id="analysisCards"></div>
         <div class="tools">
           <strong>全班紀錄 <small id="dashSource" class="dash-src"></small></strong>
-          <select id="classFilter"></select>
+          <div class="tool-filters">
+            <select id="classFilter" aria-label="班別"></select>
+            <select id="sortFilter" aria-label="排序">
+              <option value="score-desc">答對題數：高 → 低</option>
+              <option value="score-asc">答對題數：低 → 高</option>
+              <option value="id">學號</option>
+              <option value="time-desc">時間：新 → 舊</option>
+            </select>
+          </div>
         </div>
         <div class="records" id="studentRecords"></div>
       </div>
@@ -566,6 +580,7 @@
 
       let sheetLogsCache = null;
       let dashSeq = 0;
+      let dashSort = "score-desc";
       function parseSheetStudent(s) {
         const m = String(s || "").match(/^(.+?)\s*\(([^)]+)\)/);
         if (m) return { classId: m[1].trim(), studentId: normalizeId(m[2].trim()) };
@@ -1174,8 +1189,33 @@
         }[c]));
       }
 
+      function cmpStudent(a, b) {
+        if (a.classId !== b.classId) return String(a.classId).localeCompare(String(b.classId), "zh-Hant");
+        const na = parseInt(a.studentId, 10), nb = parseInt(b.studentId, 10);
+        if (!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) return na - nb;
+        return String(a.studentId).localeCompare(String(b.studentId), "zh-Hant", { numeric: true });
+      }
+      function sortLogs(logs, mode) {
+        const arr = logs.slice();
+        if (mode === "score-asc") arr.sort((a, b) => (a.done - b.done) || cmpStudent(a, b));
+        else if (mode === "id") arr.sort(cmpStudent);
+        else if (mode === "time-desc") {
+          arr.sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")) || (b.done - a.done));
+        } else {
+          arr.sort((a, b) => (b.done - a.done) || cmpStudent(a, b));
+        }
+        return arr;
+      }
+      function sortArrow(mode, col) {
+        if (col === "score" && mode === "score-desc") return " ▼";
+        if (col === "score" && mode === "score-asc") return " ▲";
+        if (col === "id" && mode === "id") return " ▼";
+        if (col === "time" && mode === "time-desc") return " ▼";
+        return "";
+      }
       async function renderDashboard(filterClass, force) {
         const seq = ++dashSeq;
+        if ($("sortFilter") && $("sortFilter").value) dashSort = $("sortFilter").value;
         $("studentRecords").innerHTML = `<div class="empty">載入全班分數…</div>`;
         $("analysisCards").innerHTML = `
           <div class="stat s1"><b>平均 3 分鐘完成題數</b><strong>…</strong></div>
@@ -1199,8 +1239,9 @@
         const cutTotal = logs.reduce((n, e) => n + (e.cutErrors || 0), 0);
         const readTotal = logs.reduce((n, e) => n + (e.readErrors || 0), 0);
         const classes = [...new Set(allLogs.map((s) => s.classId).filter(Boolean))].sort();
-        $("classFilter").innerHTML = `<option value="ALL">全部</option>` +
+        $("classFilter").innerHTML = `<option value="ALL">全部班別</option>` +
           classes.map((c) => `<option value="${escapeHtml(c)}" ${c === filterClass ? "selected" : ""}>${escapeHtml(c)}</option>`).join("");
+        if ($("sortFilter")) $("sortFilter").value = dashSort;
         $("analysisCards").innerHTML = `
           <div class="stat s1"><b>平均 3 分鐘完成題數</b><strong>${logs.length ? avgDone : "—"}</strong></div>
           <div class="stat s2"><b>劃線需加強人次</b><strong>${cutTotal}</strong></div>
@@ -1210,37 +1251,35 @@
           $("studentRecords").innerHTML = `<div class="empty">${source.indexOf("未能") >= 0 ? "未能連線 Google 試算表" : "未有紀錄"}</div>`;
           return;
         }
-        const grouped = {};
-        logs.forEach((e) => {
-          const k = e.classId + "__" + e.studentId;
-          if (!grouped[k]) grouped[k] = [];
-          grouped[k].push(e);
-        });
-        const keys = Object.keys(grouped).sort((ka, kb) => {
-          const a = grouped[ka][0], b = grouped[kb][0];
-          if (a.classId !== b.classId) return a.classId.localeCompare(b.classId, "zh-Hant");
-          const na = parseInt(a.studentId, 10), nb = parseInt(b.studentId, 10);
-          if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
-          return String(a.studentId).localeCompare(String(b.studentId), "zh-Hant", { numeric: true });
-        });
-        $("studentRecords").innerHTML = keys.map((k) => {
-          const rows = grouped[k];
-          const s = rows[0];
-          const body = rows.map((e) => `<tr>
+        const ranked = sortLogs(logs, dashSort);
+        const scores = ranked.map((e) => e.done || 0).slice().sort((a, b) => a - b);
+        const hiCut = scores[Math.max(0, scores.length - Math.ceil(scores.length * 0.2))] || 0;
+        const loCut = scores[Math.min(scores.length - 1, Math.floor(scores.length * 0.2))] || 0;
+        const showRank = dashSort === "score-desc" || dashSort === "score-asc";
+        const body = ranked.map((e, i) => {
+          const rank = dashSort === "score-asc" ? ranked.length - i : i + 1;
+          const hi = e.done >= hiCut && e.done > 0;
+          const lo = e.done <= loCut;
+          return `<tr class="${hi ? "hi" : lo ? "lo" : ""}">
+            ${showRank ? `<td class="rank-cell">${rank}</td>` : ""}
             <td>${escapeHtml(e.classId)} ${escapeHtml(e.studentId)}</td>
-            <td>${e.done}</td>
+            <td class="score-cell">${e.done}</td>
             <td>${e.avgSec || "—"}</td>
             <td>${escapeHtml(e.diagnosis)}</td>
             <td>${escapeHtml(e.time)}</td>
-          </tr>`).join("");
-          return `<article class="student-block">
-            <h3>${escapeHtml(s.classId)} ${escapeHtml(s.studentId)}</h3>
-            <table>
-              <thead><tr><th>班別學號</th><th>3分鐘完成總題數</th><th>平均每題用時(秒)</th><th>主要錯誤診斷</th><th>時間</th></tr></thead>
-              <tbody>${body}</tbody>
-            </table>
-          </article>`;
+          </tr>`;
         }).join("");
+        $("studentRecords").innerHTML = `<table>
+          <thead><tr>
+            ${showRank ? `<th class="score-h">名次</th>` : ""}
+            <th class="sortable${dashSort === "id" ? " sorted" : ""}" data-sort="id">班別學號${sortArrow(dashSort, "id")}</th>
+            <th class="sortable score-h${dashSort === "score-desc" || dashSort === "score-asc" ? " sorted" : ""}" data-sort="score">答對題數${sortArrow(dashSort, "score")}</th>
+            <th>平均用時(秒)</th>
+            <th>診斷</th>
+            <th class="sortable${dashSort === "time-desc" ? " sorted" : ""}" data-sort="time">時間${sortArrow(dashSort, "time")}</th>
+          </tr></thead>
+          <tbody>${body}</tbody>
+        </table>`;
       }
 
       const canvas = $("confetti");
@@ -1318,6 +1357,20 @@
       });
       $("printBtn").addEventListener("click", () => window.print());
       $("classFilter").addEventListener("change", (e) => renderDashboard(e.target.value, false));
+      $("sortFilter").addEventListener("change", (e) => {
+        dashSort = e.target.value;
+        renderDashboard($("classFilter").value || "ALL", false);
+      });
+      $("studentRecords").addEventListener("click", (e) => {
+        const th = e.target.closest("th.sortable");
+        if (!th) return;
+        const col = th.getAttribute("data-sort");
+        if (col === "score") dashSort = dashSort === "score-desc" ? "score-asc" : "score-desc";
+        else if (col === "id") dashSort = "id";
+        else if (col === "time") dashSort = "time-desc";
+        if ($("sortFilter")) $("sortFilter").value = dashSort;
+        renderDashboard($("classFilter").value || "ALL", false);
+      });
       $("refreshDashBtn").addEventListener("click", () => renderDashboard($("classFilter").value || "ALL", true));
       $("toReadBtn").addEventListener("click", enterRead);
       $("submitReadBtn").addEventListener("click", submitRead);
