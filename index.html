@@ -370,12 +370,33 @@
     Google Apps Script（試算表 → 擴充功能 → Apps Script）貼上後「部署 → 新增部署作業 → 網頁應用程式」：
     執行身分：我自己；存取權：任何人。把 Web App URL 貼到下方 GOOGLE_SHEET_URL。
 
+    function ensureHeaders_(sh) {
+      var wanted = ["時間", "課題", "學生", "答對題數", "平均用時", "診斷"];
+      if (sh.getLastRow() === 0) {
+        sh.getRange(1, 1, 1, wanted.length).setValues([wanted]);
+        return;
+      }
+      var lastCol = Math.max(sh.getLastColumn(), 1);
+      var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+      if (headers.indexOf("課題") !== -1) return;
+      sh.insertColumnAfter(1);
+      sh.getRange(1, 2).setValue("課題");
+      var lastRow = sh.getLastRow();
+      if (lastRow >= 2) sh.getRange(2, 2, lastRow - 1, 1).setValue("p5ma-ch1");
+    }
     function doPost(e) {
       var sh = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
-      if (sh.getLastRow() === 0) sh.appendRow(["時間","學生","答對題數","平均用時","診斷"]);
+      ensureHeaders_(sh);
       var data = {};
       try { data = JSON.parse(e.postData.contents); } catch (err) {}
-      sh.appendRow([new Date(), data.student || "", data.score || 0, data.avgTime || "", data.diagnostic || ""]);
+      sh.appendRow([
+        new Date(),
+        data.game || "p5ma-ch1",
+        data.student || "",
+        data.score || 0,
+        data.avgTime || "",
+        data.diagnostic || ""
+      ]);
       return ContentService.createTextOutput("ok");
     }
   -->
@@ -386,6 +407,7 @@
       // 然後把本檔存成 index.html，即可免費發佈到 GitHub Pages / Vercel
       // ============================================================
       const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbyGGhtjy7bKzw9M-divK5BZYL0mGcHJwcNoV_xv8VAUalMu_U9ptg8A8wIRQ8cpvQxv/exec"; // CHEUNG(PY) Google Sheet Web App
+      const GAME_ID = "p5ma-ch1";
 
       const HAN = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
       const DIGIT_KEYS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "零"];
@@ -491,6 +513,7 @@
         state.sheetSent = true;
         const avg = state.done ? Math.round(state.qTimes.reduce((a, b) => a + b, 0) / state.done) : 0;
         const payload = {
+          game: GAME_ID,
           student: `${state.classId} (${normalizeId(state.studentId)})`,
           score: state.done,
           avgTime: `${avg}秒`,
