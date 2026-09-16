@@ -239,7 +239,10 @@
 
     .dash-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-shrink: 0; margin-bottom: 8px; }
     .dash-h h1 { font-family: "Fredoka", "Noto Sans TC", sans-serif; font-size: clamp(20px, 3vh, 28px); }
-    .dash-h .acts { margin: 0; }
+    .dash-h .acts { margin: 0; flex-shrink: 0; flex-wrap: nowrap; }
+    .dash-h .acts .candy {
+      flex: 0 0 auto; white-space: nowrap; padding: 6px 12px; font-size: 13px;
+    }
     .dash { flex: 1; min-height: 0; overflow: hidden; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex-shrink: 0; }
     .stat { border-radius: 16px; padding: 10px; }
