@@ -1560,15 +1560,22 @@
             || ((e.done || 0) === (prev.done || 0) && (e.avgSec || 99999) < (prev.avgSec || 99999));
           if (better) map.set(key, e);
         });
-        return [...map.values()]
+        const ordered = [...map.values()]
           .filter((e) => (e.done || 0) > 0)
           .sort((a, b) => {
             if ((b.done || 0) !== (a.done || 0)) return (b.done || 0) - (a.done || 0);
             const ta = a.avgSec || 99999, tb = b.avgSec || 99999;
             if (ta !== tb) return ta - tb;
             return cmpStudent(a, b);
-          })
-          .slice(0, 10);
+          });
+        let lastScore = null, lastRank = 0;
+        return ordered.map((e, i) => {
+          const score = e.done || 0;
+          const place = (lastScore !== null && score === lastScore) ? lastRank : i + 1;
+          lastScore = score;
+          lastRank = place;
+          return Object.assign({}, e, { place });
+        }).slice(0, 10);
       }
       async function renderRank(force) {
         const seq = ++rankSeq;
@@ -1595,8 +1602,8 @@
             <th>班別學號</th>
             <th class="score-h">答對題數</th>
           </tr></thead>
-          <tbody>${top.map((e, i) => {
-            const n = i + 1;
+          <tbody>${top.map((e) => {
+            const n = e.place || 0;
             const cls = n === 1 ? "r1" : n === 2 ? "r2" : n === 3 ? "r3" : "";
             return `<tr class="${cls}">
               <td class="rank-cell">${n}</td>
