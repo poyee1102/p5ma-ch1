@@ -366,11 +366,11 @@
         <h1 class="title" id="titleWave"></h1>
         <div class="field">
           <label for="classId">班別</label>
-          <input id="classId" maxlength="8" placeholder="5A" autocomplete="off" />
+          <input id="classId" maxlength="5" placeholder="5A" autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div class="field">
           <label for="studentId">學號</label>
-          <input id="studentId" maxlength="6" placeholder="01" inputmode="numeric" autocomplete="off" />
+          <input id="studentId" maxlength="5" placeholder="01" autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <button class="candy pink start" id="startBtn">開始任務</button>
         <div class="login-acts">
@@ -493,74 +493,7 @@
     </div>
   </div>
 
-  <!--
-    Google Apps Script（試算表 → 擴充功能 → Apps Script）貼上後「部署 → 新增部署作業 → 網頁應用程式」：
-    執行身分：我自己；存取權：任何人。把 Web App URL 貼到下方 GOOGLE_SHEET_URL。
-
-    function ensureHeaders_(sh) {
-      var wanted = ["時間", "課題", "學生", "答對題數", "平均用時", "診斷"];
-      if (sh.getLastRow() === 0) {
-        sh.getRange(1, 1, 1, wanted.length).setValues([wanted]);
-        return;
-      }
-      var lastCol = Math.max(sh.getLastColumn(), 1);
-      var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
-      if (headers.indexOf("課題") !== -1) return;
-      sh.insertColumnAfter(1);
-      sh.getRange(1, 2).setValue("課題");
-      var lastRow = sh.getLastRow();
-      if (lastRow >= 2) sh.getRange(2, 2, lastRow - 1, 1).setValue("p5ma-ch1");
-    }
-    function sheet_() {
-      return SpreadsheetApp.openById("1b9PRoZV2jNb1CRvZTjxF-wqL4Yui6JhjmOEJkn9t4n8").getSheets()[0];
-    }
-    function doPost(e) {
-      var sh = sheet_();
-      ensureHeaders_(sh);
-      var data = {};
-      try { data = JSON.parse(e.postData.contents); } catch (err) {}
-      sh.appendRow([
-        new Date(),
-        data.game || "p5ma-ch1",
-        data.student || "",
-        data.score || 0,
-        data.avgTime || "",
-        data.diagnostic || ""
-      ]);
-      return ContentService.createTextOutput("ok");
-    }
-    function doGet(e) {
-      var sh = sheet_();
-      ensureHeaders_(sh);
-      var game = (e && e.parameter && e.parameter.game) || "";
-      var lastRow = sh.getLastRow();
-      var lastCol = Math.max(sh.getLastColumn(), 1);
-      var rows = [];
-      if (lastRow >= 2) {
-        var values = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
-        for (var i = 0; i < values.length; i++) {
-          var r = values[i];
-          var recGame = String(r[1] || "");
-          if (game && recGame && recGame !== game) continue;
-          var t = r[0];
-          var timeText = (t instanceof Date && !isNaN(t.getTime()))
-            ? Utilities.formatDate(t, "Asia/Hong_Kong", "yyyy/MM/dd HH:mm")
-            : String(t || "");
-          rows.push({
-            time: timeText, game: recGame, student: String(r[2] || ""),
-            score: r[3], avgTime: String(r[4] || ""), diagnostic: String(r[5] || "")
-          });
-        }
-      }
-      var json = JSON.stringify({ ok: true, rows: rows });
-      var cb = e && e.parameter && e.parameter.callback;
-      if (cb && /^[A-Za-z0-9_]+$/.test(cb)) {
-        return ContentService.createTextOutput(cb + "(" + json + ")")
-          .setMimeType(ContentService.MimeType.JAVASCRIPT);
-      }
-      return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
-    }
-  -->
+  <!-- 成績由已部署的 Apps Script 處理。老師密碼不在這個檔案。 -->
   <script>
     (function () {
       // ============================================================
@@ -574,7 +507,6 @@
       const DIGIT_KEYS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "零"];
       const PLACE_KEYS = ["億", "萬", "千", "百", "十"];
       const STORE_KEY = "cutcut-math-p5-v5";
-      const TEACHER_PIN = "2246";
       const GAME_SECS = 180;
       const PENALTY_SECS = 5;
       const SPEECH_FAIL = "🎤 改用按鍵拼字";
@@ -634,6 +566,9 @@
         } catch (e) { return { students: {}, logs: [] }; }
       }
       function saveStore(data) { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+      function keepCode(value) {
+        return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+      }
       function normalizeId(id) {
         const raw = String(id || "").trim();
         return /^\d+$/.test(raw) ? raw.padStart(2, "0") : raw;
@@ -747,21 +682,26 @@
           document.body.appendChild(s);
         });
       }
-      async function loadSheetLogs(force) {
-        if (sheetLogsCache && !force) return sheetLogsCache;
+      let dashPin = "";
+      let dashLogsCache = null;
+      async function loadSheetLogs(force, pin) {
+        const forDash = !!pin;
+        if (!forDash && sheetLogsCache && !force) return sheetLogsCache;
+        if (forDash && dashLogsCache && !force) return dashLogsCache;
         if (!sheetConfigured()) throw new Error("no-url");
-        const url = GOOGLE_SHEET_URL + "?game=" + encodeURIComponent(GAME_ID);
+        let url = GOOGLE_SHEET_URL + "?game=" + encodeURIComponent(GAME_ID);
+        if (pin) url += "&pin=" + encodeURIComponent(pin);
         let data = null;
         try {
           const res = await fetch(url, { method: "GET" });
           if (!res.ok) throw new Error("http");
           data = await res.json();
-        } catch (err) {
-          data = await jsonpSheet(url);
-        }
+        } catch (err) { data = await jsonpSheet(url); }
         if (!data || !data.ok) throw new Error("bad");
-        sheetLogsCache = rowsToLogs(data.rows);
-        return sheetLogsCache;
+        const logs = rowsToLogs(data.rows);
+        if (forDash) dashLogsCache = logs;
+        else sheetLogsCache = logs;
+        return logs;
       }
 
       function saveSession() {
@@ -1307,8 +1247,8 @@
       }
 
       function startGame() {
-        const classId = $("classId").value.trim().toUpperCase();
-        const studentId = $("studentId").value.trim();
+        const classId = keepCode($("classId").value);
+        const studentId = keepCode($("studentId").value);
         if (!classId || !studentId) { bounce($("startBtn")); return; }
         unlockAudio();
         state.classId = classId;
@@ -1693,7 +1633,7 @@
           <div class="stat s3 errs"><b>三大主要錯處</b><div class="miss3">…</div></div>`;
         let source = "";
         try {
-          dashAllLogs = await loadSheetLogs(!!force);
+          dashAllLogs = await loadSheetLogs(!!force, dashPin);
           source = "Google 試算表";
         } catch (err) {
           dashAllLogs = loadStore().logs;
@@ -1753,18 +1693,32 @@
         $("pinInput").focus();
       });
       $("pinCancel").addEventListener("click", () => $("pinModal").classList.remove("show"));
-      $("pinOk").addEventListener("click", () => {
-        if ($("pinInput").value === TEACHER_PIN) {
-          $("pinModal").classList.remove("show");
-          resetDashFilters();
-          showScreen("dash");
-          renderDashboard("ALL", true);
-        } else {
+            $("pinOk").addEventListener("click", async () => {
+        const typed = $("pinInput").value;
+        const btn = $("pinOk");
+        const reject = () => {
+          dashPin = "";
           bounce($("pinInput"));
           $("pinInput").classList.add("shake");
           setTimeout(() => $("pinInput").classList.remove("shake"), 400);
           $("pinInput").value = "";
+        };
+        if (!typed || btn.disabled) { reject(); return; }
+        btn.disabled = true;
+        let opened = false;
+        try {
+          await loadSheetLogs(true, typed);
+          dashPin = typed;
+          opened = true;
+        } catch (err) {
+          dashPin = "";
         }
+        btn.disabled = false;
+        if (!opened) { reject(); return; }
+          $("pinModal").classList.remove("show");
+          resetDashFilters();
+          showScreen("dash");
+          renderDashboard("ALL", true);
       });
       $("pinInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pinOk").click(); });
       $("dashBackBtn").addEventListener("click", () => { closeFilterMenu(); showScreen("login"); });
@@ -1890,6 +1844,14 @@
       ["classId", "studentId"].forEach((id) => {
         $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") startGame(); });
       });
+      function bindCode(el) {
+        el.addEventListener("input", () => {
+          const next = keepCode(el.value);
+          if (next !== el.value) el.value = next;
+        });
+      }
+      bindCode($("classId"));
+      bindCode($("studentId"));
     })();
   </script>
 </body>
